@@ -221,40 +221,8 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
 
             const size = sizes[widgetType] || { w: 300, h: 400 };
 
-            // Special handling for Project List
-            if (widgetType === 'project_list') {
-                // Create a smart_list that shows all projects
-                await db.widgets.insert({
-                    id: uuidv4(),
-                    canvas_id: widget.canvas_id,
-                    widget_type: 'smart_list',
-                    geometry: {
-                        x: newX,
-                        y: newY,
-                        w: 300,
-                        h: 400,
-                        z: (geometry.z || 0) + 1
-                    },
-                    data_source_config: {
-                        title: 'Projects',
-                        criteria: {
-                            entity_type: 'project'
-                        },
-                        is_project_list: true  // Flag to identify this as a project list
-                    },
-                    view_state: {
-                        group_id: currentGroupId
-                    },
-                    updated_at: new Date().toISOString(),
-                    is_deleted: false
-                });
-
-                console.log(`Created Project List in group ${currentGroupId}`);
-                return;
-            }
-
-            // Special handling for Add Project (from Project List)
-            if (widgetType === 'add_project') {
+            // Special handling for Project Hub
+            if (widgetType === 'project_header') {
                 // Create a new project item
                 const projectId = uuidv4();
                 await db.items.insert({

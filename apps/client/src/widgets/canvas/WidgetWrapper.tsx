@@ -218,10 +218,43 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                 detail: { w: 400, h: 500 }
             };
 
+
             const size = sizes[widgetType] || { w: 300, h: 400 };
 
-            // Special handling for Project Hub
-            if (widgetType === 'project_header') {
+            // Special handling for Project List
+            if (widgetType === 'project_list') {
+                // Create a smart_list that shows all projects
+                await db.widgets.insert({
+                    id: uuidv4(),
+                    canvas_id: widget.canvas_id,
+                    widget_type: 'smart_list',
+                    geometry: {
+                        x: newX,
+                        y: newY,
+                        w: 300,
+                        h: 400,
+                        z: (geometry.z || 0) + 1
+                    },
+                    data_source_config: {
+                        title: 'Projects',
+                        criteria: {
+                            entity_type: 'project'
+                        },
+                        is_project_list: true  // Flag to identify this as a project list
+                    },
+                    view_state: {
+                        group_id: currentGroupId
+                    },
+                    updated_at: new Date().toISOString(),
+                    is_deleted: false
+                });
+
+                console.log(`Created Project List in group ${currentGroupId}`);
+                return;
+            }
+
+            // Special handling for Add Project (from Project List)
+            if (widgetType === 'add_project') {
                 // Create a new project item
                 const projectId = uuidv4();
                 await db.items.insert({
@@ -260,23 +293,21 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                     is_deleted: false
                 });
 
-                // Create Project List widget (positioned to the right)
+                // Create Project Detail widget (positioned to the right)
                 await db.widgets.insert({
                     id: uuidv4(),
                     canvas_id: widget.canvas_id,
-                    widget_type: 'smart_list',
+                    widget_type: 'detail',
                     geometry: {
                         x: newX + 420, // 400 + 20 gap
                         y: newY,
-                        w: 300,
-                        h: 400,
+                        w: 400,
+                        h: 500,
                         z: (geometry.z || 0) + 1
                     },
                     data_source_config: {
-                        title: 'New Project Tasks',
-                        criteria: {
-                            'properties.project_id': projectId
-                        }
+                        source_type: 'project_list',  // Identifies this comes from project list
+                        filter_by_group: true          // Only show data from same group
                     },
                     view_state: {
                         group_id: currentGroupId
@@ -285,7 +316,7 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                     is_deleted: false
                 });
 
-                console.log(`Created Project Hub (${projectId}) with header and list in group ${currentGroupId}`);
+                console.log(`Created Project (${projectId}) with header and detail in group ${currentGroupId}`);
                 return;
             }
 
@@ -444,26 +475,45 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                                                     <button
                                                         onMouseDown={(e) => e.stopPropagation()}
                                                         onClick={(e) => {
-                                                            handleAddWidget(e, 'project_header');
+                                                            handleAddWidget(e, 'project_list');
                                                             setShowAddMenu(false);
                                                         }}
                                                         className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 transition-colors"
                                                     >
-                                                        Project
+                                                        Project List
                                                     </button>
                                                 </>
                                             )}
                                             {widget.widget_type === 'smart_list' && (
-                                                <button
-                                                    onMouseDown={(e) => e.stopPropagation()}
-                                                    onClick={(e) => {
-                                                        handleAddWidget(e, 'detail');
-                                                        setShowAddMenu(false);
-                                                    }}
-                                                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 transition-colors"
-                                                >
-                                                    Detail
-                                                </button>
+                                                <>
+                                                    {/* Project List can add projects */}
+                                                    {(widget.data_source_config?.is_project_list ||
+                                                        widget.data_source_config?.criteria?.entity_type === 'project') ? (
+                                                        <button
+                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                            onClick={(e) => {
+                                                                console.log('Creating project from Project List');
+                                                                handleAddWidget(e, 'add_project');
+                                                                setShowAddMenu(false);
+                                                            }}
+                                                            className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 transition-colors"
+                                                        >
+                                                            Add Project
+                                                        </button>
+                                                    ) : (
+                                                        /* Regular smart list can add detail */
+                                                        <button
+                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                            onClick={(e) => {
+                                                                handleAddWidget(e, 'detail');
+                                                                setShowAddMenu(false);
+                                                            }}
+                                                            className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 transition-colors"
+                                                        >
+                                                            Detail
+                                                        </button>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     )}

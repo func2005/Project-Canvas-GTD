@@ -1,0 +1,12 @@
+{
+    "name": "@project-canvas/logic",
+    "version": "0.0.0",
+    "main": "./src/index.ts",
+    "types": "./src/index.ts",
+    "scripts": {
+        "lint": "eslint ."
+    },
+    "devDependencies": {
+        "typescript": "latest"
+    }
+}

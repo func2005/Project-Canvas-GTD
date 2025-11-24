@@ -47,9 +47,12 @@ export const propagateSignal = async (sourceId: string, payload: SignalPayload) 
 
             // Rule: Calendar → Smart List
             if (payload.type === 'date' && widget.widget_type === 'smart_list') {
+                // Create new criteria with date, explicitly removing project_id
+                const { 'properties.project_id': _, ...restCriteria } = newConfig.criteria || {};
                 newConfig.criteria = {
-                    ...newConfig.criteria,
-                    do_date: payload.val
+                    ...restCriteria,
+                    do_date: payload.val,
+                    entity_type: 'task' // Ensure entity type is task
                 };
 
                 // Update title based on granularity
@@ -95,12 +98,22 @@ export const propagateSignal = async (sourceId: string, payload: SignalPayload) 
                     const currentCriteria = widget.data_source_config?.criteria || {};
                     // Only switch if currently showing tasks (or default)
                     if (!currentCriteria.entity_type || currentCriteria.entity_type === 'task') {
-                        newConfig.title = item.title;
-                        newConfig.criteria = {
-                            entity_type: 'task',
-                            'properties.project_id': item.id
-                            // Don't filter by do_date - show all tasks of this project
-                        };
+                        // Check if already filtering by this project
+                        if (currentCriteria['properties.project_id'] === item.id) {
+                            // Toggle OFF: Remove project filter
+                            const { 'properties.project_id': _, ...restCriteria } = currentCriteria;
+                            newConfig.criteria = restCriteria;
+                            newConfig.title = widget.data_source_config?.title || 'Tasks';
+                        } else {
+                            // Toggle ON: Set project filter and clear date
+                            const { do_date: _, ...restCriteria } = currentCriteria;
+                            newConfig.title = item.title;
+                            newConfig.criteria = {
+                                ...restCriteria,
+                                entity_type: 'task',
+                                'properties.project_id': item.id
+                            };
+                        }
                         hasChanges = true;
                     }
                 }

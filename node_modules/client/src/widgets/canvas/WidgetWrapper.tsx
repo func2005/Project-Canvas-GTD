@@ -192,10 +192,9 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                     granularity: dateGranularity
                 });
             }
-            // Project mode: send clear signal to remove project filter from Smart Lists
+            // Project mode: send project signal (SignalController will handle toggle)
             else if (projectId) {
-                // Don't change Project Header's project_id, just notify Smart Lists
-                propagateSignal(widget.id, { type: 'clear_project' });
+                propagateSignal(widget.id, { type: 'item', id: projectId });
             }
         }
     }, [onSetActive, onBringToFront, widget]);

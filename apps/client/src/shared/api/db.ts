@@ -156,6 +156,50 @@ export class DatabaseService {
                 }
             });
 
+            // Add hook for project auto-completion and auto-active
+            db.items.postSave(async (doc, _oldDoc) => {
+                // 1. Check if updated item is a task and belongs to a project
+                if (doc.entity_type === 'task' && doc.properties?.project_id) {
+                    const projectId = doc.properties.project_id;
+
+                    // 2. Find the project
+                    const project = await db.items.findOne(projectId).exec();
+
+                    // Skip if project not found
+                    if (!project) return;
+
+                    // 3. Find all active tasks for this project
+                    const projectTasks = await db.items.find({
+                        selector: {
+                            entity_type: 'task',
+                            'properties.project_id': projectId,
+                            is_deleted: false
+                        }
+                    }).exec();
+
+                    // Ensure there is at least one task
+                    if (projectTasks.length === 0) return;
+
+                    const anyActive = projectTasks.some(t => t.system_status === 'active');
+                    const allCompleted = projectTasks.every(t => t.system_status === 'completed');
+
+                    // Case 1: Auto-Active (Re-open project if any task is active)
+                    if (anyActive && project.system_status === 'completed') {
+                        console.log(`Auto-activating project ${project.title} (${projectId})`);
+                        await project.incrementalPatch({
+                            system_status: 'active'
+                        });
+                    }
+                    // Case 2: Auto-Complete (Complete project if all tasks are done)
+                    else if (allCompleted && project.system_status !== 'completed') {
+                        console.log(`Auto-completing project ${project.title} (${projectId})`);
+                        await project.incrementalPatch({
+                            system_status: 'completed'
+                        });
+                    }
+                }
+            }, false);
+
             console.log('Database initialized successfully');
             return db;
         } catch (error) {

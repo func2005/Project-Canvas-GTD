@@ -24,6 +24,7 @@ export const LinkLayer: React.FC<LinkLayerProps> = ({ widgets }) => {
             const calendars = groupWidgets.filter(w => w.widget_type === 'calendar_master');
             const smartLists = groupWidgets.filter(w => w.widget_type === 'smart_list');
             const details = groupWidgets.filter(w => w.widget_type === 'detail');
+            const projectHeaders = groupWidgets.filter(w => w.widget_type === 'project_header');
 
             // Flow 1: Calendar → Smart List
             calendars.forEach(cal => {
@@ -32,7 +33,21 @@ export const LinkLayer: React.FC<LinkLayerProps> = ({ widgets }) => {
                 });
             });
 
-            // Flow 2: Smart List → Detail
+            // Flow 2: Calendar → Project Header
+            calendars.forEach(cal => {
+                projectHeaders.forEach(header => {
+                    connections.push(renderConnection(cal, header, `${groupId}-cal-header`));
+                });
+            });
+
+            // Flow 3: Project Header → Smart List
+            projectHeaders.forEach(header => {
+                smartLists.forEach(list => {
+                    connections.push(renderConnection(header, list, `${groupId}-header-list`));
+                });
+            });
+
+            // Flow 4: Smart List → Detail
             smartLists.forEach(list => {
                 details.forEach(detail => {
                     connections.push(renderConnection(list, detail, `${groupId}-list-detail`));

@@ -23,7 +23,27 @@ export const SmartList: React.FC<SmartListProps> = ({ widget }) => {
     const [newItemTitle, setNewItemTitle] = useState('');
     const config = widget.data_source_config || {};
     const query = useQueryBuilder(config as any);
-    const items = useRxQuery<DataItem>('items', query);
+    const rawItems = useRxQuery<DataItem>('items', query);
+
+    // Sort items: Ghost Tasks (Overdue) first
+    const items = [...rawItems].sort((a, b) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const aPastDue = a.due_date && new Date(a.due_date) < today && a.system_status === 'active';
+        const bPastDue = b.due_date && new Date(b.due_date) < today && b.system_status === 'active';
+
+        if (aPastDue && !bPastDue) return -1;
+        if (!aPastDue && bPastDue) return 1;
+
+        const aPastDo = a.do_date && new Date(a.do_date) < today && a.system_status === 'active';
+        const bPastDo = b.do_date && new Date(b.do_date) < today && b.system_status === 'active';
+
+        if (aPastDo && !bPastDo) return -1;
+        if (!aPastDo && bPastDo) return 1;
+
+        return 0;
+    });
 
     const handleToggleComplete = async (item: RxDocument<DataItem>) => {
         const newStatus = item.system_status === 'completed' ? 'active' : 'completed';

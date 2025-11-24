@@ -34,13 +34,21 @@ export const useQueryBuilder = (config?: IDataSourceConfig): MangoQuery => {
 
                 if (val === null) {
                     selector.do_date = null;
-                } else if (val === 'today') {
-                    const todayStr = format(today, 'yyyy-MM-dd');
-                    // Overdue Ghost Logic: Show today's items OR overdue active items
+                } else if (val === 'today' || /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+                    const targetDate = val === 'today' ? format(today, 'yyyy-MM-dd') : val;
+
+                    // Ghost View Logic:
+                    // 1. Tasks for the target date
+                    // 2. Past incomplete tasks (do_date < targetDate)
+                    // 3. Past due incomplete tasks (due_date < targetDate)
                     selector.$or = [
-                        { do_date: todayStr },
+                        { do_date: targetDate },
                         {
-                            do_date: { $lt: todayStr },
+                            do_date: { $lt: targetDate },
+                            system_status: 'active'
+                        },
+                        {
+                            due_date: { $lt: targetDate },
                             system_status: 'active'
                         }
                     ];

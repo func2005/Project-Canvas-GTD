@@ -26,8 +26,14 @@ export const DraggableListItem: React.FC<DraggableListItemProps> = ({ item, widg
         opacity: isDragging ? 0.3 : 1, // Make source ghost-like
     };
 
-    const isOverdue = item.do_date && new Date(item.do_date) < new Date(new Date().setHours(0, 0, 0, 0)) && item.system_status === 'active';
-    const daysOverdue = isOverdue ? Math.floor((Date.now() - new Date(item.do_date!).getTime()) / (1000 * 60 * 60 * 24)) : 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const isPastDue = item.due_date && new Date(item.due_date) < today && item.system_status === 'active';
+    const isPastDo = item.do_date && new Date(item.do_date) < today && item.system_status === 'active';
+
+    const daysPastDue = isPastDue ? Math.floor((Date.now() - new Date(item.due_date!).getTime()) / (1000 * 60 * 60 * 24)) : 0;
+    const daysPastDo = isPastDo ? Math.floor((Date.now() - new Date(item.do_date!).getTime()) / (1000 * 60 * 60 * 24)) : 0;
 
     return (
         <div
@@ -38,12 +44,18 @@ export const DraggableListItem: React.FC<DraggableListItemProps> = ({ item, widg
             className={clsx(
                 "group flex items-center gap-2 p-2 rounded hover:bg-gray-50 transition-colors touch-none relative overflow-hidden",
                 item.system_status === 'completed' && "opacity-50",
-                isOverdue && "bg-red-50 border border-red-100"
+                isPastDue ? "bg-red-50 border border-red-100" :
+                    isPastDo ? "bg-yellow-50 border border-yellow-100" : ""
             )}
         >
-            {isOverdue && (
+            {isPastDue && (
                 <div className="absolute right-1 top-0.5 text-[10px] text-red-500 font-medium px-1 bg-red-100 rounded">
-                    {daysOverdue} days ago
+                    Due {daysPastDue} days ago
+                </div>
+            )}
+            {!isPastDue && isPastDo && (
+                <div className="absolute right-1 top-0.5 text-[10px] text-yellow-600 font-medium px-1 bg-yellow-100 rounded">
+                    {daysPastDo} days ago
                 </div>
             )}
             <button
@@ -71,7 +83,7 @@ export const DraggableListItem: React.FC<DraggableListItemProps> = ({ item, widg
                     className={clsx(
                         "text-sm text-gray-700 truncate block",
                         item.system_status === 'completed' && "line-through text-gray-400",
-                        isOverdue && "text-red-700"
+                        isPastDue && "text-red-700"
                     )}
                 >
                     {item.properties?.energy_level === 'high' && <span title="High Energy">🔋</span>}

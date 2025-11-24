@@ -8,7 +8,7 @@ interface LinkLayerProps {
 export const LinkLayer: React.FC<LinkLayerProps> = ({ widgets }) => {
     // Group widgets by group_id
     const groups = widgets.reduce((acc, widget) => {
-        const groupId = widget.view_state?.group_id;
+        const groupId = widget.group_id;
         if (groupId) {
             if (!acc[groupId]) acc[groupId] = [];
             acc[groupId].push(widget);

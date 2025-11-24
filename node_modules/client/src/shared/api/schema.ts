@@ -1,3 +1,4 @@
+
 // Data Items Schema
 export const dataItemsSchema = {
     title: 'data_items schema',
@@ -105,7 +106,7 @@ export const dataItemsSchema = {
 // Canvas Widgets Schema
 export const canvasWidgetsSchema = {
     title: 'canvas_widgets schema',
-    version: 0,
+    version: 1,
     primaryKey: 'id',
     type: 'object',
     properties: {
@@ -116,6 +117,9 @@ export const canvasWidgetsSchema = {
         canvas_id: {
             type: 'string',
             maxLength: 100
+        },
+        group_id: {
+            type: 'string'
         },
         widget_type: {
             type: 'string',
@@ -144,8 +148,7 @@ export const canvasWidgetsSchema = {
             properties: {
                 is_pinned: { type: 'boolean' },
                 is_collapsed: { type: 'boolean' },
-                view_mode: { type: 'string' },
-                group_id: { type: 'string' }
+                view_mode: { type: 'string' }
             }
         },
         // Sync Metadata

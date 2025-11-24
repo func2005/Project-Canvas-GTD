@@ -50,6 +50,9 @@ const WidgetsLayer = ({
                     scale={scale}
                 />
             ))}
+            <div className="absolute bottom-10 right-10 bg-black/75 text-white px-3 py-1 rounded font-mono text-sm pointer-events-none z-50">
+                Scale: {scale.toFixed(3)}
+            </div>
         </div>
     );
 };
@@ -222,9 +225,6 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
                     ) : null}
                 </DragOverlay>
             </DndContext>
-            <div className="fixed bottom-4 right-4 bg-black/75 text-white px-3 py-1 rounded font-mono text-sm pointer-events-none z-50">
-                Scale: {scale.toFixed(3)}
-            </div>
         </div>
     );
 };

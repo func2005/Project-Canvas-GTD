@@ -4,6 +4,7 @@ import { DetailInspector } from './components/DetailInspector';
 import { ArchiveBin } from './components/ArchiveBin';
 import { Matrix } from './components/Matrix';
 import { ProjectHeader } from './components/ProjectHeader';
+
 import type { CanvasWidget } from '../shared/api/db';
 import type { RxDocument } from 'rxdb';
 
@@ -16,6 +17,7 @@ const WIDGET_COMPONENTS: Record<WidgetType, React.ComponentType<any>> = {
     archive_bin: ArchiveBin,
     matrix: Matrix,
     project_header: ProjectHeader,
+    // project_detail: ProjectDetail, // Removed
 };
 
 interface WidgetFactoryProps {

@@ -2,7 +2,8 @@ import { dbService } from '../db';
 
 export type SignalPayload =
     | { type: 'date'; val: string; granularity?: 'day' | 'month' }
-    | { type: 'item'; id: string };
+    | { type: 'item'; id: string }
+    | { type: 'clear_project' };
 
 export const propagateSignal = async (sourceId: string, payload: SignalPayload) => {
     try {
@@ -12,9 +13,11 @@ export const propagateSignal = async (sourceId: string, payload: SignalPayload) 
         const sourceWidget = await db.widgets.findOne(sourceId).exec();
         if (!sourceWidget) return;
 
-        const groupId = sourceWidget.view_state?.group_id;
+        const groupId = sourceWidget.group_id;
+        // Note: We allow missing group_id for project detail logic, as it might need to search globally or create new widgets outside the group
+
+
         if (!groupId) {
-            console.log(`Signal ignored: Source ${sourceId} has no group_id`);
             return;
         }
 
@@ -24,19 +27,18 @@ export const propagateSignal = async (sourceId: string, payload: SignalPayload) 
                 canvas_id: sourceWidget.canvas_id,
                 is_deleted: false,
                 id: { $ne: sourceId },
-                'view_state.group_id': groupId
+                group_id: groupId
             }
         }).exec();
 
         if (targetWidgets.length === 0) return;
 
-        console.log(`Propagating signal from ${sourceId} (Group: ${groupId}) to ${targetWidgets.length} widgets`);
+
 
         // 3. Update logic based on widget types in group
         await Promise.all(targetWidgets.map(async (widget) => {
             // Rule: Pinned widgets ignore signals
             if (widget.view_state?.is_pinned) {
-                console.log(`Signal blocked by pin: ${widget.id}`);
                 return;
             }
 
@@ -61,14 +63,61 @@ export const propagateSignal = async (sourceId: string, payload: SignalPayload) 
 
                 hasChanges = true;
             }
+            // Rule: Calendar → Project Header
+            else if (payload.type === 'date' && widget.widget_type === 'project_header') {
+                newConfig.selected_date = payload.val;
+                newConfig.date_granularity = payload.granularity;
+                // Clear project_id when switching to date mode
+                newConfig.project_id = undefined;
+                hasChanges = true;
+            }
             // Rule: Smart List → Detail
             else if (payload.type === 'item' && widget.widget_type === 'detail') {
                 newConfig.item_id = payload.id;
                 hasChanges = true;
             }
+            // Rule: Project Item -> Project Header
+            else if (payload.type === 'item' && widget.widget_type === 'project_header') {
+                // Only update if the signal is directly from a Project item
+                const item = await db.items.findOne(payload.id).exec();
+                if (item && item.entity_type === 'project') {
+                    newConfig.project_id = payload.id;
+                    // Clear date when switching to project mode
+                    newConfig.selected_date = undefined;
+                    newConfig.date_granularity = undefined;
+                    hasChanges = true;
+                }
+            }
+            // Rule: Project Item -> Smart List (Task Mode)
+            else if (payload.type === 'item' && widget.widget_type === 'smart_list') {
+                const item = await db.items.findOne(payload.id).exec();
+                if (item && item.entity_type === 'project') {
+                    const currentCriteria = widget.data_source_config?.criteria || {};
+                    // Only switch if currently showing tasks (or default)
+                    if (!currentCriteria.entity_type || currentCriteria.entity_type === 'task') {
+                        newConfig.title = item.title;
+                        newConfig.criteria = {
+                            entity_type: 'task',
+                            'properties.project_id': item.id
+                            // Don't filter by do_date - show all tasks of this project
+                        };
+                        hasChanges = true;
+                    }
+                }
+            }
+            // Rule: Clear Project -> Smart List (remove project filter)
+            else if (payload.type === 'clear_project' && widget.widget_type === 'smart_list') {
+                const currentCriteria = widget.data_source_config?.criteria || {};
+                // Remove project_id filter if it exists
+                if (currentCriteria['properties.project_id']) {
+                    const { 'properties.project_id': _, ...restCriteria } = currentCriteria;
+                    newConfig.criteria = restCriteria;
+                    newConfig.title = widget.data_source_config?.title || 'Tasks';
+                    hasChanges = true;
+                }
+            }
 
             if (hasChanges) {
-                console.log(`Updating ${widget.widget_type} ${widget.id}:`, newConfig);
                 await widget.patch({
                     data_source_config: newConfig
                 });

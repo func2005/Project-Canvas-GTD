@@ -3,6 +3,7 @@ import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
 import { RxDBUpdatePlugin } from 'rxdb/plugins/update';
 import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
+import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 import { dataItemsSchema, canvasWidgetsSchema } from './schema';
 import { canvasLinksSchema, CanvasLink } from './schemas/canvasLinks';
 
@@ -12,7 +13,9 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Enable update plugin
+// Enable update plugin
 addRxPlugin(RxDBUpdatePlugin);
+addRxPlugin(RxDBMigrationSchemaPlugin);
 
 // Type definitions for collections
 export type DataItem = {
@@ -35,6 +38,7 @@ export type DataItem = {
         energy_level?: 'high' | 'medium' | 'low';
         tags?: string[];
         content?: string;
+        project_id?: string;
     };
     updated_at: string;
     is_deleted: boolean;
@@ -45,6 +49,7 @@ export type DataItem = {
 export type CanvasWidget = {
     id: string;
     canvas_id: string;
+    group_id?: string;
     widget_type: 'calendar_master' | 'smart_list' | 'matrix' | 'detail' | 'project_header' | 'archive_bin';
     geometry: {
         x: number;
@@ -58,7 +63,6 @@ export type CanvasWidget = {
         is_pinned?: boolean;
         is_collapsed?: boolean;
         view_mode?: string;
-        group_id?: string;
     };
     updated_at: string;
     is_deleted: boolean;
@@ -141,6 +145,11 @@ export class DatabaseService {
                 },
                 widgets: {
                     schema: canvasWidgetsSchema,
+                    migrationStrategies: {
+                        1: (oldDoc) => {
+                            return oldDoc;
+                        }
+                    }
                 },
                 links: {
                     schema: canvasLinksSchema,

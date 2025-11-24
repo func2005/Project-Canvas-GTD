@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Plus, Check } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import clsx from 'clsx';
 import { format } from 'date-fns';
 import type { RxDocument } from 'rxdb';
@@ -14,79 +14,10 @@ interface SmartListProps {
     widget: RxDocument<CanvasWidget>;
 }
 
-import { useDraggable, useDroppable } from '@dnd-kit/core';
+import { useDroppable } from '@dnd-kit/core';
+import { DraggableListItem } from './DraggableListItem';
 
-const SmartListItem = ({ item, widgetId, onToggle, onSelect }: { item: RxDocument<DataItem>, widgetId: string, onToggle: (item: RxDocument<DataItem>) => void, onSelect: (id: string) => void }) => {
-    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-        id: `${widgetId}::${item.id}`,
-        data: {
-            id: item.id,
-            entity_type: 'task',
-            title: item.title // Pass title for overlay
-        }
-    });
 
-    const style = {
-        // transform: CSS.Translate.toString(transform), // Disable transform on source, use DragOverlay instead
-        opacity: isDragging ? 0.3 : 1, // Make source ghost-like
-    };
-
-    const isOverdue = item.do_date && new Date(item.do_date) < new Date(new Date().setHours(0, 0, 0, 0)) && item.system_status === 'active';
-    const daysOverdue = isOverdue ? Math.floor((Date.now() - new Date(item.do_date!).getTime()) / (1000 * 60 * 60 * 24)) : 0;
-
-    return (
-        <div
-            ref={setNodeRef}
-            style={style}
-            {...listeners}
-            {...attributes}
-            className={clsx(
-                "group flex items-center gap-2 p-2 rounded hover:bg-gray-50 transition-colors touch-none relative overflow-hidden",
-                item.system_status === 'completed' && "opacity-50",
-                isOverdue && "bg-red-50 border border-red-100"
-            )}
-        >
-            {isOverdue && (
-                <div className="absolute right-1 top-0.5 text-[10px] text-red-500 font-medium px-1 bg-red-100 rounded">
-                    {daysOverdue} days ago
-                </div>
-            )}
-            <button
-                onPointerDown={(e) => e.stopPropagation()} // Prevent drag start on checkbox
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onToggle(item);
-                }}
-                className={clsx(
-                    "flex-shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-colors cursor-pointer",
-                    item.system_status === 'completed'
-                        ? "bg-blue-500 border-blue-500 text-white"
-                        : "border-gray-300 text-transparent hover:border-blue-400"
-                )}
-            >
-                <Check size={12} strokeWidth={3} />
-            </button>
-
-            <div
-                className="flex-1 cursor-pointer hover:text-blue-600"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={() => onSelect(item.id)}
-            >
-                <span
-                    className={clsx(
-                        "text-sm text-gray-700 truncate block",
-                        item.system_status === 'completed' && "line-through text-gray-400",
-                        isOverdue && "text-red-700"
-                    )}
-                >
-                    {item.properties?.energy_level === 'high' && <span title="High Energy">🔋</span>}
-                    {item.properties?.energy_level === 'low' && <span title="Low Energy">☕️</span>}
-                    {item.title}
-                </span>
-            </div>
-        </div>
-    );
-};
 
 export const SmartList: React.FC<SmartListProps> = ({ widget }) => {
     const [newItemTitle, setNewItemTitle] = useState('');
@@ -143,10 +74,17 @@ export const SmartList: React.FC<SmartListProps> = ({ widget }) => {
                 }
             });
 
+            // Determine entity_type based on filter
+            let entityType: 'task' | 'event' | 'project' = 'task';
+            const filterType = criteria.entity_type;
+            if (filterType && ['task', 'event', 'project'].includes(filterType)) {
+                entityType = filterType as any;
+            }
+
             await db.items.insert({
                 id: uuidv4(),
                 title: newItemTitle,
-                entity_type: 'task',
+                entity_type: entityType,
                 system_status: 'active',
                 created_at: Date.now(),
                 updated_at: new Date().toISOString(),
@@ -170,6 +108,107 @@ export const SmartList: React.FC<SmartListProps> = ({ widget }) => {
         }
     });
 
+    const filterType = (config?.criteria?.entity_type || 'task') as string;
+    const placeholderText = ({
+        task: 'Add a task...',
+        event: 'Add an event...',
+        project: 'Add a project...',
+        all: 'Add a task...'
+    } as Record<string, string>)[filterType] || 'Add a task...';
+
+    // @ts-ignore
+    const isFlipped = widget.view_state?.is_flipped;
+
+    if (isFlipped) {
+        return (
+            <div className="flex flex-col h-full bg-white p-4 overflow-y-auto" onMouseDown={(e) => e.stopPropagation()}>
+                <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">List Settings</h3>
+
+                <div className="space-y-4">
+                    {/* Title */}
+                    <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">List Title</label>
+                        <input
+                            type="text"
+                            defaultValue={config.title || ''}
+                            onBlur={(e) => widget.patch({ data_source_config: { ...config, title: e.target.value } })}
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:border-blue-500 outline-none"
+                            placeholder="My List"
+                        />
+                    </div>
+
+                    {/* Entity Type */}
+                    <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Item Type</label>
+                        <select
+                            defaultValue={config.criteria?.entity_type || 'task'}
+                            onChange={(e) => widget.patch({
+                                data_source_config: {
+                                    ...config,
+                                    criteria: { ...config.criteria, entity_type: e.target.value }
+                                }
+                            })}
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:border-blue-500 outline-none bg-white"
+                        >
+                            <option value="task">Tasks</option>
+                            <option value="event">Events</option>
+                            <option value="project">Projects</option>
+                            <option value="all">All Types</option>
+                        </select>
+                    </div>
+
+                    {/* Date Filter */}
+                    <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Date Filter</label>
+                        <select
+                            defaultValue={config.criteria?.do_date || ''}
+                            onChange={(e) => widget.patch({
+                                data_source_config: {
+                                    ...config,
+                                    criteria: { ...config.criteria, do_date: e.target.value || null }
+                                }
+                            })}
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:border-blue-500 outline-none bg-white"
+                        >
+                            <option value="">Any Date</option>
+                            <option value="today">Today</option>
+                            <option value={format(new Date(), 'yyyy-MM-dd')}>Today (Fixed: {format(new Date(), 'yyyy-MM-dd')})</option>
+                        </select>
+                        <p className="text-[10px] text-gray-400 mt-1">
+                            * Drag a date from calendar to set specific date
+                        </p>
+                    </div>
+
+                    {/* Status Filter */}
+                    <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
+                        <select
+                            defaultValue={config.criteria?.system_status || 'active'}
+                            onChange={(e) => widget.patch({
+                                data_source_config: {
+                                    ...config,
+                                    criteria: { ...config.criteria, system_status: e.target.value }
+                                }
+                            })}
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:border-blue-500 outline-none bg-white"
+                        >
+                            <option value="active">Active Only</option>
+                            <option value="completed">Completed Only</option>
+                            <option value="all">All Statuses</option>
+                        </select>
+                    </div>
+
+                    <button
+                        onClick={() => widget.patch({ view_state: { ...widget.view_state, is_flipped: false } as any })}
+                        className="w-full bg-blue-500 text-white rounded py-1.5 text-sm font-medium hover:bg-blue-600 transition-colors mt-4"
+                    >
+                        Done
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div
             ref={setNodeRef}
@@ -186,7 +225,7 @@ export const SmartList: React.FC<SmartListProps> = ({ widget }) => {
                 )}
 
                 {items.map((item) => (
-                    <SmartListItem
+                    <DraggableListItem
                         key={item.id}
                         item={item}
                         widgetId={widget.id}
@@ -203,7 +242,7 @@ export const SmartList: React.FC<SmartListProps> = ({ widget }) => {
                         type="text"
                         value={newItemTitle}
                         onChange={(e) => setNewItemTitle(e.target.value)}
-                        placeholder="Add a task..."
+                        placeholder={placeholderText}
                         className="flex-1 bg-transparent border-none outline-none text-sm text-gray-700 placeholder-gray-400"
                     />
                 </div>

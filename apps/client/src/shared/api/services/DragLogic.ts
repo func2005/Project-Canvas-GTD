@@ -17,7 +17,7 @@ export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvas
         const doc = await db.items.findOne(activeData.id).exec();
         if (!doc) return;
 
-        console.log('DragEnd:', activeData, '->', overData);
+
 
         // Logic Table 5.4 Implementation
         if (overData.type === 'calendar_cell') {
@@ -68,13 +68,19 @@ export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvas
                 const d = new Date();
                 d.setDate(d.getDate() + 1);
                 updates.do_date = d.toISOString().split('T')[0];
+            } else if (typeof criteria.do_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(criteria.do_date)) {
+                // Handle specific date (YYYY-MM-DD)
+                updates.do_date = criteria.do_date;
             }
             // Note: complex dates like 'this_week' are hard to map to a single date, ignoring for now
 
-            // 2. Handle project_id (stored in properties)
-            if (criteria['properties.project_id']) {
-                props.project_id = criteria['properties.project_id'];
-            }
+            // 2. Handle properties (project_id, priority, etc.)
+            Object.keys(criteria).forEach(key => {
+                if (key.startsWith('properties.')) {
+                    const propName = key.replace('properties.', '');
+                    props[propName] = criteria[key];
+                }
+            });
 
             // 3. Handle system_status
             if (criteria.system_status && typeof criteria.system_status === 'string') {
@@ -90,6 +96,19 @@ export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvas
                 system_status: 'completed',
                 completed_at: Date.now()
             });
+        }
+        else if (overData.type === 'project_detail') {
+            // Case E: Item -> Project Detail
+            const projectId = overData.project_id;
+            if (projectId) {
+                const currentProps = doc.properties || {};
+                await (doc as any).incrementalPatch({
+                    properties: {
+                        ...currentProps,
+                        project_id: projectId
+                    }
+                });
+            }
         }
     } catch (error) {
         console.error('Drag logic failed:', error);

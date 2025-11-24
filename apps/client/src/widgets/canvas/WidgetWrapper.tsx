@@ -1,12 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Rnd } from 'react-rnd';
-import { Pin, X, LayoutTemplate } from 'lucide-react';
+import { Pin, X, LayoutTemplate, Eye, Pencil } from 'lucide-react';
 import clsx from 'clsx';
 import type { RxDocument } from 'rxdb';
 import type { CanvasWidget } from '@/shared/api/db';
 import { dbService } from '@/shared/api/db';
 import { v4 as uuidv4 } from 'uuid';
 import { WidgetFactory } from '../registry';
+import { propagateSignal } from '@/shared/api/services/SignalController';
 
 interface WidgetWrapperProps {
     widget: RxDocument<CanvasWidget>;
@@ -28,6 +29,8 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
     const [showAddMenu, setShowAddMenu] = useState(false);
     const rndRef = useRef<Rnd>(null);
     const menuRef = useRef<HTMLDivElement>(null);
+    const filterMenuRef = useRef<HTMLDivElement>(null);
+    const [showFilterMenu, setShowFilterMenu] = useState(false);
 
     const geometry = widget.geometry;
     const viewState = widget.view_state || {};
@@ -59,15 +62,18 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
                 setShowAddMenu(false);
             }
+            if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) {
+                setShowFilterMenu(false);
+            }
         };
 
-        if (showAddMenu) {
+        if (showAddMenu || showFilterMenu) {
             document.addEventListener('mousedown', handleClickOutside);
             return () => {
                 document.removeEventListener('mousedown', handleClickOutside);
             };
         }
-    }, [showAddMenu]);
+    }, [showAddMenu, showFilterMenu]);
 
     const handleDragStart = useCallback(() => {
         setIsDragging(true);
@@ -171,7 +177,28 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
         e.stopPropagation();
         onSetActive();
         onBringToFront();
-    }, [onSetActive, onBringToFront]);
+
+        // Send appropriate signal based on widget type and mode
+        if (widget.widget_type === 'project_header') {
+            const selectedDate = widget.data_source_config?.selected_date;
+            const dateGranularity = widget.data_source_config?.date_granularity;
+            const projectId = widget.data_source_config?.project_id;
+
+            // Date mode: send date signal
+            if (selectedDate) {
+                propagateSignal(widget.id, {
+                    type: 'date',
+                    val: selectedDate,
+                    granularity: dateGranularity
+                });
+            }
+            // Project mode: send clear signal to remove project filter from Smart Lists
+            else if (projectId) {
+                // Don't change Project Header's project_id, just notify Smart Lists
+                propagateSignal(widget.id, { type: 'clear_project' });
+            }
+        }
+    }, [onSetActive, onBringToFront, widget]);
 
     const handleTogglePin = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -193,14 +220,11 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
             const db = dbService.getDatabase();
 
             // Ensure widget has a group_id, create one if needed
-            let currentGroupId = widget.view_state?.group_id;
+            let currentGroupId = widget.group_id;
             if (!currentGroupId) {
                 currentGroupId = uuidv4();
                 await widget.patch({
-                    view_state: {
-                        ...viewState,
-                        group_id: currentGroupId
-                    }
+                    group_id: currentGroupId
                 });
             }
 
@@ -254,38 +278,18 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                     data_source_config: {
                         project_id: projectId
                     },
+                    group_id: currentGroupId,
                     view_state: {
-                        group_id: currentGroupId
+                        // group_id moved to top level
                     },
                     updated_at: new Date().toISOString(),
                     is_deleted: false
                 });
 
-                // Create Project Detail widget (positioned to the right)
-                await db.widgets.insert({
-                    id: uuidv4(),
-                    canvas_id: widget.canvas_id,
-                    widget_type: 'detail',
-                    geometry: {
-                        x: newX + 420, // 400 + 20 gap
-                        y: newY,
-                        w: 400,
-                        h: 500,
-                        z: (geometry.z || 0) + 1
-                    },
-                    data_source_config: {
-                        source_type: 'project_list',  // Identifies this comes from project list
-                        filter_by_group: true          // Only show data from same group
-                    },
-                    view_state: {
-                        group_id: currentGroupId
-                    },
-                    updated_at: new Date().toISOString(),
-                    is_deleted: false
-                });
-
-                console.log(`Created Project (${projectId}) with header and detail in group ${currentGroupId}`);
+                console.log(`Created Project Hub (${projectId}) with header in group ${currentGroupId}`);
                 return;
+
+
             }
 
             // Prepare data_source_config with smart defaults
@@ -300,7 +304,8 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                 dataSourceConfig = {
                     title: monthName,
                     criteria: {
-                        do_date: currentMonth
+                        do_date: currentMonth,
+                        entity_type: 'task'
                     }
                 };
             }
@@ -318,8 +323,9 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                     z: (geometry.z || 0) + 1
                 },
                 data_source_config: dataSourceConfig,
+                group_id: currentGroupId,
                 view_state: {
-                    group_id: currentGroupId
+                    // group_id moved to top level
                 },
                 updated_at: new Date().toISOString(),
                 is_deleted: false
@@ -397,6 +403,55 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                             {widget.data_source_config?.title || widget.widget_type.replace('_', ' ')}
                         </span>
 
+                        {widget.widget_type === 'smart_list' && (
+                            <div className="relative ml-2" ref={filterMenuRef}>
+                                <button
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowFilterMenu(!showFilterMenu);
+                                    }}
+                                    className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-blue-600 transition-colors px-1 py-0.5 rounded hover:bg-gray-200"
+                                >
+                                    <span className="capitalize">{widget.data_source_config?.criteria?.entity_type || 'All'}</span>
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                </button>
+
+                                {showFilterMenu && (
+                                    <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 min-w-[100px]">
+                                        {['task', 'event', 'project', 'all'].map((type) => (
+                                            <button
+                                                key={type}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    const newType = type === 'all' ? undefined : type;
+                                                    await widget.patch({
+                                                        data_source_config: {
+                                                            ...widget.data_source_config,
+                                                            criteria: {
+                                                                ...widget.data_source_config?.criteria,
+                                                                entity_type: newType
+                                                            }
+                                                        }
+                                                    });
+                                                    setShowFilterMenu(false);
+                                                }}
+                                                className={clsx(
+                                                    "w-full text-left px-3 py-2 text-xs hover:bg-gray-100 transition-colors capitalize",
+                                                    (widget.data_source_config?.criteria?.entity_type || 'all') === type && "text-blue-600 font-medium bg-blue-50"
+                                                )}
+                                            >
+                                                {type}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <div className="flex space-x-1" onMouseDown={(e) => e.stopPropagation()}>
                             {/* Add Widget Button - context based on widget type */}
                             {(widget.widget_type === 'calendar_master' || widget.widget_type === 'smart_list') && (
@@ -443,45 +498,26 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                                                     <button
                                                         onMouseDown={(e) => e.stopPropagation()}
                                                         onClick={(e) => {
-                                                            handleAddWidget(e, 'project_list');
+                                                            handleAddWidget(e, 'project_header');
                                                             setShowAddMenu(false);
                                                         }}
                                                         className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 transition-colors"
                                                     >
-                                                        Project List
+                                                        Project
                                                     </button>
                                                 </>
                                             )}
                                             {widget.widget_type === 'smart_list' && (
-                                                <>
-                                                    {/* Project List can add projects */}
-                                                    {(widget.data_source_config?.is_project_list ||
-                                                        widget.data_source_config?.criteria?.entity_type === 'project') ? (
-                                                        <button
-                                                            onMouseDown={(e) => e.stopPropagation()}
-                                                            onClick={(e) => {
-                                                                console.log('Creating project from Project List');
-                                                                handleAddWidget(e, 'add_project');
-                                                                setShowAddMenu(false);
-                                                            }}
-                                                            className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 transition-colors"
-                                                        >
-                                                            Add Project
-                                                        </button>
-                                                    ) : (
-                                                        /* Regular smart list can add detail */
-                                                        <button
-                                                            onMouseDown={(e) => e.stopPropagation()}
-                                                            onClick={(e) => {
-                                                                handleAddWidget(e, 'detail');
-                                                                setShowAddMenu(false);
-                                                            }}
-                                                            className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 transition-colors"
-                                                        >
-                                                            Detail
-                                                        </button>
-                                                    )}
-                                                </>
+                                                <button
+                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                    onClick={(e) => {
+                                                        handleAddWidget(e, 'detail');
+                                                        setShowAddMenu(false);
+                                                    }}
+                                                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 transition-colors"
+                                                >
+                                                    Detail
+                                                </button>
                                             )}
                                         </div>
                                     )}
@@ -522,9 +558,17 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                                     "p-1 rounded hover:bg-gray-200 transition-colors",
                                     (viewState as any).is_flipped ? "text-blue-600" : "text-gray-400 hover:text-blue-600"
                                 )}
-                                title="Switch View / Edit"
+                                title={
+                                    ['detail', 'project_detail', 'project_header', 'smart_list'].includes(widget.widget_type)
+                                        ? ((viewState as any).is_flipped ? "View Mode" : "Edit Mode")
+                                        : "Switch View"
+                                }
                             >
-                                <LayoutTemplate size={14} />
+                                {['detail', 'project_detail', 'project_header', 'smart_list'].includes(widget.widget_type) ? (
+                                    (viewState as any).is_flipped ? <Eye size={14} /> : <Pencil size={14} />
+                                ) : (
+                                    <LayoutTemplate size={14} />
+                                )}
                             </button>
                         </div>
                     </div>
@@ -533,7 +577,7 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                         <WidgetFactory widget={widget} />
                     </div>
                 </div>
-            </Rnd>
+            </Rnd >
         </>
     );
 };

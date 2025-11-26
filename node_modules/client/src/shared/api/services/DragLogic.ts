@@ -18,8 +18,6 @@ export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvas
         const doc = await db.items.findOne(activeData.id).exec();
         if (!doc) return;
 
-
-
         // Logic Table 5.4 Implementation
         if (overData.type === 'calendar_cell') {
             // Case A: List Item -> Calendar Cell
@@ -73,7 +71,6 @@ export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvas
                 // Handle specific date (YYYY-MM-DD)
                 updates.do_date = criteria.do_date;
             }
-            // Note: complex dates like 'this_week' are hard to map to a single date, ignoring for now
 
             // 2. Handle properties (project_id, priority, etc.)
             Object.keys(criteria).forEach(key => {
@@ -101,7 +98,19 @@ export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvas
         else if (overData.type === 'timeline_day') {
             // Case E: Item -> Timeline Day
             const { day, startHour, totalMinutes } = overData;
-            const activeRect = active.rect.current.translated;
+
+            let activeRect = active.rect.current.translated;
+            if (!activeRect && active.rect.current.initial && event.delta) {
+                activeRect = {
+                    top: active.rect.current.initial.top + event.delta.y,
+                    left: active.rect.current.initial.left + event.delta.x,
+                    height: active.rect.current.initial.height,
+                    width: active.rect.current.initial.width,
+                    bottom: active.rect.current.initial.bottom + event.delta.y,
+                    right: active.rect.current.initial.right + event.delta.x
+                } as any;
+            }
+
             const overRect = over.rect;
 
             if (activeRect && overRect) {
@@ -113,7 +122,15 @@ export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvas
                 const snappedMinutes = Math.round(minutesFromStart / 15) * 15;
 
                 const startTime = addMinutes(setHours(setMinutes(new Date(day), 0), startHour), snappedMinutes);
-                const endTime = addMinutes(startTime, 45); // Default 45 mins
+
+                // Calculate duration: preserve existing or default to 45 mins
+                let duration = 45;
+                if (doc.start_time && doc.end_time) {
+                    const diff = (new Date(doc.end_time).getTime() - new Date(doc.start_time).getTime()) / (1000 * 60);
+                    if (diff > 0) duration = diff;
+                }
+
+                const endTime = addMinutes(startTime, duration);
 
                 await (doc as any).incrementalPatch({
                     do_date: format(new Date(day), 'yyyy-MM-dd'),

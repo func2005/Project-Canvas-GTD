@@ -18,7 +18,9 @@ export const DraggableListItem: React.FC<DraggableListItemProps> = ({ item, widg
         data: {
             id: item.id,
             entity_type: 'task',
-            title: item.title // Pass title for overlay
+            title: item.title, // Pass title for overlay
+            start_time: item.start_time,
+            end_time: item.end_time
         }
     });
 

@@ -6,7 +6,7 @@ import type { RxDocument } from 'rxdb';
 import type { CanvasWidget, DataItem } from '@/shared/api/db';
 import { useRxQuery } from '@/shared/api/hooks/useRxDB';
 import { propagateSignal } from '@/shared/api/services/SignalController';
-import { useDroppable } from '@dnd-kit/core';
+import { useDroppable, useDndMonitor, DragOverlay } from '@dnd-kit/core';
 
 interface MasterCalendarProps {
     widget: RxDocument<CanvasWidget>;
@@ -57,8 +57,7 @@ const DroppableTimelineDay = ({ day, startHour, totalMinutes, children, isToday,
             onClick={onClick}
             className={clsx(
                 "border-r last:border-r-0 relative h-full",
-                isToday && "bg-blue-50/30",
-                isOver && "bg-green-100/50 ring-2 ring-inset ring-green-400"
+                isToday && "bg-blue-50/30"
             )}
         >
             {children}
@@ -73,6 +72,59 @@ export const MasterCalendar: React.FC<MasterCalendarProps> = ({ widget }) => {
     const [timelineHeight, setTimelineHeight] = useState(0);
     const timelineRef = useRef<HTMLDivElement>(null);
     const [resizing, setResizing] = useState<{ itemId: string; edge: 'top' | 'bottom'; initialY: number; originalStart: Date; originalEnd: Date } | null>(null);
+    const [draggedOverItem, setDraggedOverItem] = useState<{ day: Date; start: Date; end: Date } | null>(null);
+
+    useDndMonitor({
+        onDragMove(event) {
+            const { active, over } = event;
+            if (!over || !over.data.current || over.data.current.type !== 'timeline_day') {
+                setDraggedOverItem(null);
+                return;
+            }
+
+            const { day, startHour, totalMinutes } = over.data.current;
+
+            // Use active.rect.current.translated if available, otherwise fallback to delta
+            let activeRect = active.rect.current.translated;
+            if (!activeRect && active.rect.current.initial && event.delta) {
+                activeRect = {
+                    top: active.rect.current.initial.top + event.delta.y,
+                    left: active.rect.current.initial.left + event.delta.x,
+                    height: active.rect.current.initial.height,
+                    width: active.rect.current.initial.width,
+                    bottom: active.rect.current.initial.bottom + event.delta.y,
+                    right: active.rect.current.initial.right + event.delta.x
+                } as any;
+            }
+            // Fallback to client rect
+
+
+            const overRect = over.rect;
+
+            if (activeRect && overRect) {
+                const relativeY = activeRect.top - overRect.top;
+                const percentage = Math.max(0, Math.min(1, relativeY / overRect.height));
+                const minutesFromStart = percentage * totalMinutes;
+                const snappedMinutes = Math.round(minutesFromStart / 15) * 15;
+
+                const start = addMinutes(setHours(setMinutes(new Date(day), 0), startHour), snappedMinutes);
+
+                let duration = 45;
+                const activeData = active.data.current;
+                if (activeData && activeData.start_time && activeData.end_time) {
+                    const diff = differenceInMinutes(new Date(activeData.end_time), new Date(activeData.start_time));
+                    if (diff > 0) duration = diff;
+                }
+
+                const end = addMinutes(start, duration);
+
+                setDraggedOverItem({ day: new Date(day), start, end });
+            }
+        },
+        onDragEnd() {
+            setDraggedOverItem(null);
+        }
+    });
 
     const monthStart = startOfMonth(currentDate);
     const monthEnd = endOfMonth(currentDate);
@@ -113,19 +165,19 @@ export const MasterCalendar: React.FC<MasterCalendarProps> = ({ widget }) => {
     const handleDayClick = (date: Date, e: React.MouseEvent) => {
         e.stopPropagation();
         setSelectedDate(date);
-        propagateSignal({
-            type: 'date_selected',
-            date: format(date, 'yyyy-MM-dd'),
-            sourceWidgetId: widget.id
+        propagateSignal(widget.id, {
+            type: 'date',
+            val: format(date, 'yyyy-MM-dd'),
+            granularity: 'day'
         });
     };
 
     const handleMonthChange = (newDate: Date) => {
         setCurrentDate(newDate);
-        propagateSignal({
-            type: 'month_changed',
-            date: format(newDate, 'yyyy-MM-dd'),
-            sourceWidgetId: widget.id
+        propagateSignal(widget.id, {
+            type: 'date',
+            val: format(newDate, 'yyyy-MM-dd'),
+            granularity: 'month'
         });
     };
 
@@ -139,10 +191,9 @@ export const MasterCalendar: React.FC<MasterCalendarProps> = ({ widget }) => {
 
     const handleItemClick = (item: DataItem, e: React.MouseEvent) => {
         e.stopPropagation();
-        propagateSignal({
-            type: 'item_selected',
-            itemId: item.id,
-            sourceWidgetId: widget.id
+        propagateSignal(widget.id, {
+            type: 'item',
+            id: item.id
         });
     };
 
@@ -445,6 +496,21 @@ export const MasterCalendar: React.FC<MasterCalendarProps> = ({ widget }) => {
                                                     </div>
                                                 );
                                             })}
+
+                                            {/* Ghost Block */}
+                                            {draggedOverItem && isSameDay(day, draggedOverItem.day) && (
+                                                <div
+                                                    className="absolute left-0.5 right-0.5 rounded px-1 py-0.5 text-[10px] overflow-hidden border border-dashed border-blue-400 bg-blue-50/50 z-20 pointer-events-none"
+                                                    style={{
+                                                        top: `${((draggedOverItem.start.getHours() * 60 + draggedOverItem.start.getMinutes() - startHour * 60) / totalMinutes) * 100}%`,
+                                                        height: `${((differenceInMinutes(draggedOverItem.end, draggedOverItem.start)) / totalMinutes) * 100}%`
+                                                    }}
+                                                >
+                                                    <div className="text-blue-600 font-medium">
+                                                        {format(draggedOverItem.start, 'HH:mm')} - {format(draggedOverItem.end, 'HH:mm')}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </DroppableTimelineDay>
                                     );
                                 })}

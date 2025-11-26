@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, addWeeks, subWeeks, addMinutes, setHours, setMinutes, differenceInMinutes } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
 import type { RxDocument } from 'rxdb';
@@ -38,9 +38,41 @@ const DroppableCell = ({ dateStr, isCurrentMonth, isToday, isSelected, onClick, 
     );
 };
 
+const DroppableTimelineDay = ({ day, startHour, totalMinutes, children, isToday, onClick }: any) => {
+    const dateStr = format(day, 'yyyy-MM-dd');
+    const { isOver, setNodeRef } = useDroppable({
+        id: `timeline_${dateStr}`,
+        data: {
+            type: 'timeline_day',
+            date: dateStr,
+            day,
+            startHour,
+            totalMinutes
+        }
+    });
+
+    return (
+        <div
+            ref={setNodeRef}
+            onClick={onClick}
+            className={clsx(
+                "border-r last:border-r-0 relative h-full",
+                isToday && "bg-blue-50/30",
+                isOver && "bg-green-100/50 ring-2 ring-inset ring-green-400"
+            )}
+        >
+            {children}
+        </div>
+    );
+};
+
 export const MasterCalendar: React.FC<MasterCalendarProps> = ({ widget }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+    const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
+    const [timelineHeight, setTimelineHeight] = useState(0);
+    const timelineRef = useRef<HTMLDivElement>(null);
+    const [resizing, setResizing] = useState<{ itemId: string; edge: 'top' | 'bottom'; initialY: number; originalStart: Date; originalEnd: Date } | null>(null);
 
     const monthStart = startOfMonth(currentDate);
     const monthEnd = endOfMonth(currentDate);
@@ -49,78 +81,167 @@ export const MasterCalendar: React.FC<MasterCalendarProps> = ({ widget }) => {
 
     const days = eachDayOfInterval({ start: startDate, end: endDate });
 
+    // Week View Range
+    const weekStart = startOfWeek(currentDate);
+    const weekEnd = endOfWeek(currentDate);
+    const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
+
     // Query items for this range
-    const query = useMemo(() => ({
-        selector: {
-            entity_type: { $in: ['task', 'event'] },
-            is_deleted: false,
-            system_status: { $ne: 'archived' },
-            do_date: {
-                $gte: format(startDate, 'yyyy-MM-dd'),
-                $lte: format(endDate, 'yyyy-MM-dd')
+    const query = useMemo(() => {
+        const start = viewMode === 'month' ? startDate : weekStart;
+        const end = viewMode === 'month' ? endDate : weekEnd;
+        return {
+            selector: {
+                entity_type: { $in: ['task', 'event'] },
+                is_deleted: false,
+                system_status: { $ne: 'archived' },
+                do_date: {
+                    $gte: format(start, 'yyyy-MM-dd'),
+                    $lte: format(end, 'yyyy-MM-dd')
+                }
             }
-        }
-    }), [startDate, endDate]);
+        };
+    }, [viewMode, startDate, endDate, weekStart, weekEnd]);
 
     const items = useRxQuery<DataItem>('items', query);
 
-    const getItemsForDay = (day: Date) => {
-        const dateStr = format(day, 'yyyy-MM-dd');
+    const getItemsForDay = (date: Date) => {
+        const dateStr = format(date, 'yyyy-MM-dd');
         return items.filter(item => item.do_date === dateStr);
     };
 
-    const handleDayClick = (day: Date, e: React.MouseEvent) => {
+    const handleDayClick = (date: Date, e: React.MouseEvent) => {
         e.stopPropagation();
-        setSelectedDate(day);
-        const dateStr = format(day, 'yyyy-MM-dd');
-        console.log('Selected date:', dateStr);
-
-        // Propagate signal to downstream widgets
-        propagateSignal(widget.id, { type: 'date', val: dateStr, granularity: 'day' });
+        setSelectedDate(date);
+        propagateSignal({
+            type: 'date_selected',
+            date: format(date, 'yyyy-MM-dd'),
+            sourceWidgetId: widget.id
+        });
     };
 
     const handleMonthChange = (newDate: Date) => {
         setCurrentDate(newDate);
-        setSelectedDate(null); // Clear selection on month change
-        const monthStr = format(newDate, 'yyyy-MM');
-        console.log('Selected month:', monthStr);
-        propagateSignal(widget.id, { type: 'date', val: monthStr, granularity: 'month' });
+        propagateSignal({
+            type: 'month_changed',
+            date: format(newDate, 'yyyy-MM-dd'),
+            sourceWidgetId: widget.id
+        });
+    };
+
+    const handleWeekChange = (newDate: Date) => {
+        setCurrentDate(newDate);
     };
 
     const handleBackgroundClick = () => {
-        if (selectedDate) {
-            setSelectedDate(null);
-            const monthStr = format(currentDate, 'yyyy-MM');
-            console.log('Cleared selection, reverting to month:', monthStr);
-            propagateSignal(widget.id, { type: 'date', val: monthStr, granularity: 'month' });
-        }
+        setSelectedDate(null);
     };
 
-    return (
-        <div
-            className="flex flex-col h-full bg-white"
-            onClick={handleBackgroundClick}
-        >
-            <div className="flex items-center justify-between p-2 border-b bg-gray-50">
-                <button
-                    onClick={(e) => { e.stopPropagation(); handleMonthChange(subMonths(currentDate, 1)); }}
-                    className="p-1 hover:bg-gray-200 rounded text-gray-600"
-                    onMouseDown={(e) => e.stopPropagation()}
-                >
-                    <ChevronLeft size={16} />
-                </button>
-                <span className="font-semibold text-gray-700 text-sm">
-                    {format(currentDate, 'MMMM yyyy')}
-                </span>
-                <button
-                    onClick={(e) => { e.stopPropagation(); handleMonthChange(addMonths(currentDate, 1)); }}
-                    className="p-1 hover:bg-gray-200 rounded text-gray-600"
-                    onMouseDown={(e) => e.stopPropagation()}
-                >
-                    <ChevronRight size={16} />
-                </button>
-            </div>
+    const handleItemClick = (item: DataItem, e: React.MouseEvent) => {
+        e.stopPropagation();
+        propagateSignal({
+            type: 'item_selected',
+            itemId: item.id,
+            sourceWidgetId: widget.id
+        });
+    };
 
+    // Resize Logic
+    const snapToQuarterHour = useCallback((minutes: number) => {
+        return Math.round(minutes / 15) * 15;
+    }, []);
+
+    const getTimeFromY = useCallback((yPos: number, day: Date, startHour: number, totalMinutes: number) => {
+        if (!timelineRef.current) return null;
+        const rect = timelineRef.current.getBoundingClientRect();
+        const relativeY = yPos - rect.top;
+        const percentage = Math.max(0, Math.min(1, relativeY / rect.height));
+        const minutesFromStart = percentage * totalMinutes;
+
+        const snappedMinutes = snapToQuarterHour(minutesFromStart);
+        return addMinutes(setHours(setMinutes(day, 0), startHour), snappedMinutes);
+    }, [snapToQuarterHour]);
+
+    const handleResizeStart = useCallback((item: DataItem, edge: 'top' | 'bottom', e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (!item.start_time || !item.end_time) return;
+
+        setResizing({
+            itemId: item.id,
+            edge,
+            initialY: e.clientY,
+            originalStart: new Date(item.start_time),
+            originalEnd: new Date(item.end_time)
+        });
+    }, []);
+
+    const handleResizeMove = useCallback((e: MouseEvent) => {
+        if (!resizing) return;
+
+        const item = items.find(i => i.id === resizing.itemId);
+        if (!item || !item.do_date) return;
+
+        const currentDay = new Date(item.do_date);
+        const startHour = 8;
+        const endHour = 21;
+        const totalMinutes = (endHour - startHour) * 60;
+
+        const newTime = getTimeFromY(e.clientY, currentDay, startHour, totalMinutes);
+        if (!newTime) return;
+
+        // Clamp to timeline bounds
+        const minTime = setHours(setMinutes(currentDay, 0), startHour);
+        const maxTime = setHours(setMinutes(currentDay, 0), endHour);
+        const clampedTime = newTime < minTime ? minTime : newTime > maxTime ? maxTime : newTime;
+
+        if (resizing.edge === 'top') {
+            // Adjust start_time, keep end_time, enforce min 15-min duration
+            const newEnd = new Date(item.end_time!);
+            if (differenceInMinutes(newEnd, clampedTime) >= 15) {
+                item.patch({ start_time: clampedTime.toISOString() });
+            }
+        } else {
+            // Adjust end_time, keep start_time, enforce min 15-min duration
+            const newStart = new Date(item.start_time!);
+            if (differenceInMinutes(clampedTime, newStart) >= 15) {
+                item.patch({ end_time: clampedTime.toISOString() });
+            }
+        }
+    }, [resizing, items, getTimeFromY]);
+
+    const handleResizeEnd = useCallback(() => {
+        setResizing(null);
+    }, []);
+
+    useEffect(() => {
+        if (!resizing) return;
+
+        window.addEventListener('mousemove', handleResizeMove);
+        window.addEventListener('mouseup', handleResizeEnd);
+
+        return () => {
+            window.removeEventListener('mousemove', handleResizeMove);
+            window.removeEventListener('mouseup', handleResizeEnd);
+        };
+    }, [resizing, handleResizeMove, handleResizeEnd]);
+
+    useEffect(() => {
+        if (viewMode !== 'week') return;
+        const node = timelineRef.current;
+        if (node) {
+            const resizeObserver = new ResizeObserver(entries => {
+                for (let entry of entries) {
+                    setTimelineHeight(entry.contentRect.height);
+                }
+            });
+            resizeObserver.observe(node);
+            return () => resizeObserver.disconnect();
+        }
+    }, [viewMode]);
+
+    const renderMonthView = () => (
+        <>
             <div className="grid grid-cols-7 bg-gray-200 border-b">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                     <div key={day} className="bg-gray-50 py-1 text-center text-[10px] font-medium text-gray-500 uppercase tracking-wider">
@@ -183,6 +304,250 @@ export const MasterCalendar: React.FC<MasterCalendarProps> = ({ widget }) => {
                     );
                 })}
             </div>
+        </>
+    );
+
+    const renderWeekView = () => {
+        // Time slots: 08:00 to 21:00
+        const startHour = 8;
+        const endHour = 21;
+        const totalHours = endHour - startHour;
+        const totalMinutes = totalHours * 60;
+
+        // Dynamic label density
+        const labelInterval = timelineHeight < 300 ? 4 : timelineHeight < 600 ? 2 : 1;
+
+        return (
+            <div className="flex-1 flex flex-col overflow-hidden bg-white relative">
+                {/* Header */}
+                <div className="grid grid-cols-8 border-b bg-gray-50 flex-shrink-0 shadow-sm z-20">
+                    <div className="p-2 border-r text-xs text-gray-400 font-medium flex items-end justify-center bg-gray-50">
+                        Time
+                    </div>
+                    {weekDays.map(day => {
+                        const isToday = isSameDay(day, new Date());
+                        return (
+                            <div key={day.toISOString()} className={clsx(
+                                "py-2 text-center border-r last:border-r-0 bg-gray-50",
+                                isToday && "bg-blue-50"
+                            )}>
+                                <div className="text-xs text-gray-500 uppercase">{format(day, 'EEE')}</div>
+                                <div className={clsx(
+                                    "text-sm font-bold w-6 h-6 mx-auto flex items-center justify-center rounded-full mt-1",
+                                    isToday ? "bg-blue-500 text-white" : "text-gray-700"
+                                )}>
+                                    {format(day, 'd')}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* Main Content Area (Timeline + Unscheduled) */}
+                <div className="flex-1 flex flex-col overflow-hidden relative">
+
+                    {/* Timeline Area (Fills remaining space) */}
+                    <div className="flex-1 relative w-full overflow-hidden" ref={timelineRef}>
+                        <div className="absolute inset-0 flex">
+                            {/* Time Labels Column */}
+                            <div className="w-[12.5%] border-r bg-gray-50 flex-shrink-0 relative z-10 h-full">
+                                {Array.from({ length: totalHours + 1 }).map((_, i) => {
+                                    if (i % labelInterval !== 0) return null;
+                                    // Don't show last label if it's too close to bottom
+                                    if (i === totalHours) return null;
+
+                                    return (
+                                        <div
+                                            key={i}
+                                            className="absolute w-full text-right pr-2 text-xs text-gray-400 -mt-2"
+                                            style={{ top: `${(i / totalHours) * 100}%` }}
+                                        >
+                                            {`${(startHour + i).toString().padStart(2, '0')}:00`}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Days Columns */}
+                            <div className="flex-1 grid grid-cols-7 relative h-full">
+                                {/* Grid Lines */}
+                                <div className="absolute inset-0 pointer-events-none">
+                                    {Array.from({ length: totalHours * 4 }).map((_, i) => (
+                                        <div
+                                            key={i}
+                                            className={clsx(
+                                                "absolute w-full border-b",
+                                                i % 4 === 0 ? "border-gray-200" : "border-gray-100"
+                                            )}
+                                            style={{ top: `${(i / (totalHours * 4)) * 100}%` }}
+                                        />
+                                    ))}
+                                </div>
+
+                                {/* Day Columns & Tasks */}
+                                {weekDays.map(day => {
+                                    const dayItems = getItemsForDay(day);
+                                    const timedItems = dayItems.filter(item => item.start_time && item.end_time);
+                                    const isToday = isSameDay(day, new Date());
+
+                                    return (
+                                        <DroppableTimelineDay
+                                            key={day.toISOString()}
+                                            day={day}
+                                            startHour={startHour}
+                                            totalMinutes={totalMinutes}
+                                            isToday={isToday}
+                                        >
+                                            {timedItems.map(item => {
+                                                const start = new Date(item.start_time!);
+                                                const end = new Date(item.end_time!);
+
+                                                // Calculate position
+                                                const startMinutes = start.getHours() * 60 + start.getMinutes();
+                                                const endMinutes = end.getHours() * 60 + end.getMinutes();
+                                                const duration = endMinutes - startMinutes;
+
+                                                // Offset from startHour
+                                                const offsetMinutes = startMinutes - (startHour * 60);
+
+                                                const top = (offsetMinutes / totalMinutes) * 100;
+                                                const height = (duration / totalMinutes) * 100;
+
+                                                return (
+                                                    <div
+                                                        key={item.id}
+                                                        className={clsx(
+                                                            "absolute left-0.5 right-0.5 rounded px-1 py-0.5 text-[10px] overflow-hidden border shadow-sm cursor-pointer hover:z-10 hover:ring-1 hover:ring-blue-400",
+                                                            item.entity_type === 'event'
+                                                                ? "bg-purple-100 border-purple-200 text-purple-800"
+                                                                : "bg-blue-100 border-blue-200 text-blue-800"
+                                                        )}
+                                                        style={{ top: `${top}%`, height: `${height}%` }}
+                                                        title={`${format(start, 'HH:mm')} - ${format(end, 'HH:mm')} ${item.title}`}
+                                                        onClick={(e) => handleItemClick(item, e)}
+                                                    >
+                                                        {/* Top Resize Handle */}
+                                                        <div
+                                                            className="absolute top-0 left-0 right-0 h-1 cursor-ns-resize hover:bg-blue-400 opacity-0 hover:opacity-100 transition-opacity z-20"
+                                                            onMouseDown={(e) => handleResizeStart(item, 'top', e)}
+                                                        />
+
+                                                        <div className="truncate leading-tight font-medium">{item.title}</div>
+                                                        <div className="text-[9px] leading-tight opacity-75">
+                                                            {format(start, 'HH:mm')} - {format(end, 'HH:mm')}
+                                                        </div>
+
+                                                        {/* Bottom Resize Handle */}
+                                                        <div
+                                                            className="absolute bottom-0 left-0 right-0 h-1 cursor-ns-resize hover:bg-blue-400 opacity-0 hover:opacity-100 transition-opacity z-20"
+                                                            onMouseDown={(e) => handleResizeStart(item, 'bottom', e)}
+                                                        />
+                                                    </div>
+                                                );
+                                            })}
+                                        </DroppableTimelineDay>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Unscheduled Area (Fixed at bottom) */}
+                    <div className="flex-shrink-0 border-t-4 border-gray-200 bg-gray-50 p-2 z-20 max-h-[40%] overflow-y-auto">
+                        <div className="text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">Unscheduled Tasks</div>
+                        <div className="grid grid-cols-8 gap-2">
+                            <div className="text-xs text-gray-400 text-right pt-1">All Day</div>
+                            <div className="col-span-7 grid grid-cols-7 gap-2">
+                                {weekDays.map(day => {
+                                    const dayItems = getItemsForDay(day);
+                                    const unscheduledItems = dayItems.filter(item => !item.start_time || !item.end_time);
+
+                                    return (
+                                        <div key={day.toISOString()} className="flex flex-col gap-1 min-h-[50px] bg-white rounded border border-dashed border-gray-300 p-1">
+                                            {unscheduledItems.map(item => (
+                                                <div
+                                                    key={item.id}
+                                                    className={clsx(
+                                                        "text-[10px] px-1 py-0.5 rounded border truncate cursor-pointer hover:ring-1 hover:ring-blue-400",
+                                                        item.entity_type === 'event'
+                                                            ? "bg-purple-50 text-purple-700 border-purple-100"
+                                                            : "bg-blue-50 text-blue-700 border-blue-100",
+                                                        item.system_status === 'completed' && "opacity-50 line-through"
+                                                    )}
+                                                    title={item.title}
+                                                    onClick={(e) => handleItemClick(item, e)}
+                                                >
+                                                    {item.title}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div
+            className="flex flex-col h-full bg-white"
+            onClick={handleBackgroundClick}
+        >
+            <div className="flex items-center justify-between p-2 border-b bg-gray-50">
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (viewMode === 'month') handleMonthChange(subMonths(currentDate, 1));
+                            else handleWeekChange(subWeeks(currentDate, 1));
+                        }}
+                        className="p-1 hover:bg-gray-200 rounded text-gray-600"
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        <ChevronLeft size={16} />
+                    </button>
+                    <span className="font-semibold text-gray-700 text-sm w-32 text-center">
+                        {format(currentDate, viewMode === 'month' ? 'MMMM yyyy' : "'Week of' MMM d")}
+                    </span>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (viewMode === 'month') handleMonthChange(addMonths(currentDate, 1));
+                            else handleWeekChange(addWeeks(currentDate, 1));
+                        }}
+                        className="p-1 hover:bg-gray-200 rounded text-gray-600"
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        <ChevronRight size={16} />
+                    </button>
+                </div>
+
+                <div className="flex bg-gray-200 rounded p-0.5">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setViewMode('month'); }}
+                        className={clsx(
+                            "px-3 py-1 text-xs rounded font-medium transition-colors",
+                            viewMode === 'month' ? "bg-white text-blue-600 shadow-sm" : "text-gray-600 hover:text-gray-800"
+                        )}
+                    >
+                        Month
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setViewMode('week'); }}
+                        className={clsx(
+                            "px-3 py-1 text-xs rounded font-medium transition-colors",
+                            viewMode === 'week' ? "bg-white text-blue-600 shadow-sm" : "text-gray-600 hover:text-gray-800"
+                        )}
+                    >
+                        Week
+                    </button>
+                </div>
+            </div>
+
+            {viewMode === 'month' ? renderMonthView() : renderWeekView()}
         </div>
     );
 };

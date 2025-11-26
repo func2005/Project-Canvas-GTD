@@ -1,5 +1,6 @@
 import { DragEndEvent } from '@dnd-kit/core';
 import { ProjectCanvasDatabase, DataItem } from '../db';
+import { addMinutes, setHours, setMinutes, format } from 'date-fns';
 
 export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvasDatabase) => {
     const { active, over } = event;
@@ -96,6 +97,30 @@ export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvas
                 system_status: 'completed',
                 completed_at: Date.now()
             });
+        }
+        else if (overData.type === 'timeline_day') {
+            // Case E: Item -> Timeline Day
+            const { day, startHour, totalMinutes } = overData;
+            const activeRect = active.rect.current.translated;
+            const overRect = over.rect;
+
+            if (activeRect && overRect) {
+                const relativeY = activeRect.top - overRect.top;
+                const percentage = Math.max(0, Math.min(1, relativeY / overRect.height));
+                const minutesFromStart = percentage * totalMinutes;
+
+                // Snap to 15 minutes
+                const snappedMinutes = Math.round(minutesFromStart / 15) * 15;
+
+                const startTime = addMinutes(setHours(setMinutes(new Date(day), 0), startHour), snappedMinutes);
+                const endTime = addMinutes(startTime, 45); // Default 45 mins
+
+                await (doc as any).incrementalPatch({
+                    do_date: format(new Date(day), 'yyyy-MM-dd'),
+                    start_time: startTime.toISOString(),
+                    end_time: endTime.toISOString()
+                });
+            }
         }
         else if (overData.type === 'project_detail') {
             // Case E: Item -> Project Detail

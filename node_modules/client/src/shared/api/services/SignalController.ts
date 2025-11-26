@@ -16,7 +16,6 @@ export const propagateSignal = async (sourceId: string, payload: SignalPayload) 
         const groupId = sourceWidget.group_id;
         // Note: We allow missing group_id for project detail logic, as it might need to search globally or create new widgets outside the group
 
-
         if (!groupId) {
             return;
         }
@@ -32,8 +31,6 @@ export const propagateSignal = async (sourceId: string, payload: SignalPayload) 
         }).exec();
 
         if (targetWidgets.length === 0) return;
-
-
 
         // 3. Update logic based on widget types in group
         await Promise.all(targetWidgets.map(async (widget) => {
@@ -72,6 +69,11 @@ export const propagateSignal = async (sourceId: string, payload: SignalPayload) 
                 newConfig.date_granularity = payload.granularity;
                 // Clear project_id when switching to date mode
                 newConfig.project_id = undefined;
+                hasChanges = true;
+            }
+            // Rule: Calendar → Timeline
+            else if (payload.type === 'date' && widget.widget_type === 'timeline') {
+                newConfig.selected_date = payload.val;
                 hasChanges = true;
             }
             // Rule: Smart List → Detail

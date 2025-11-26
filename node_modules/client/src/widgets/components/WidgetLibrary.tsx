@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { Plus, LayoutGrid, Calendar, List, FileText, Trash2, Grid, Type } from 'lucide-react';
+import { Plus, Calendar, List, FileText, Trash2, Grid, Type, Clock } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { dbService } from '@/shared/api/db';
-import type { CanvasWidget } from '@/shared/api/db';
 
 const WIDGET_TYPES = [
-    { type: 'project_hub', label: 'Project Hub (Group)', icon: Type, w: 0, h: 0 },
+    { type: 'project_hub', label: 'Project Header', icon: Type, w: 0, h: 0 },
     { type: 'inbox', label: 'Inbox (Smart List)', icon: List, w: 300, h: 400 },
     { type: 'calendar_master', label: 'Master Calendar', icon: Calendar, w: 600, h: 500 },
     { type: 'smart_list', label: 'Smart List', icon: List, w: 300, h: 400 },
     { type: 'detail', label: 'Detail Inspector', icon: FileText, w: 300, h: 400 },
     { type: 'archive_bin', label: 'Archive Bin', icon: Trash2, w: 200, h: 200 },
     { type: 'matrix', label: 'Eisenhower Matrix', icon: Grid, w: 500, h: 500 },
+    { type: 'timeline', label: 'Timeline', icon: Clock, w: 800, h: 400 },
 ];
 
 export const WidgetLibrary = () => {

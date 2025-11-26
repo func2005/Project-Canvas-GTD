@@ -40,6 +40,14 @@ export const LinkLayer: React.FC<LinkLayerProps> = ({ widgets }) => {
                 });
             });
 
+            // Flow 2.5: Calendar → Timeline
+            const timelines = groupWidgets.filter(w => w.widget_type === 'timeline');
+            calendars.forEach(cal => {
+                timelines.forEach(timeline => {
+                    connections.push(renderConnection(cal, timeline, `${groupId}-cal-timeline`));
+                });
+            });
+
             // Flow 3: Project Header → Smart List
             projectHeaders.forEach(header => {
                 smartLists.forEach(list => {

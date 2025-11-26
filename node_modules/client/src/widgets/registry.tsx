@@ -4,6 +4,7 @@ import { DetailInspector } from './components/DetailInspector';
 import { ArchiveBin } from './components/ArchiveBin';
 import { Matrix } from './components/Matrix';
 import { ProjectHeader } from './components/ProjectHeader';
+import { TimelineWidget } from './components/TimelineWidget';
 
 import type { CanvasWidget } from '../shared/api/db';
 import type { RxDocument } from 'rxdb';
@@ -17,6 +18,7 @@ const WIDGET_COMPONENTS: Record<WidgetType, React.ComponentType<any>> = {
     archive_bin: ArchiveBin,
     matrix: Matrix,
     project_header: ProjectHeader,
+    timeline: TimelineWidget,
     // project_detail: ProjectDetail, // Removed
 };
 

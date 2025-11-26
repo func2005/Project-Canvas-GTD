@@ -106,7 +106,7 @@ export const dataItemsSchema = {
 // Canvas Widgets Schema
 export const canvasWidgetsSchema = {
     title: 'canvas_widgets schema',
-    version: 1,
+    version: 2,
     primaryKey: 'id',
     type: 'object',
     properties: {
@@ -123,7 +123,7 @@ export const canvasWidgetsSchema = {
         },
         widget_type: {
             type: 'string',
-            enum: ['calendar_master', 'smart_list', 'matrix', 'detail', 'project_header', 'archive_bin']
+            enum: ['calendar_master', 'smart_list', 'matrix', 'detail', 'project_header', 'archive_bin', 'timeline']
         },
         // Physical Properties
         geometry: {

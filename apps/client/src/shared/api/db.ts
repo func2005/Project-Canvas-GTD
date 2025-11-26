@@ -50,7 +50,7 @@ export type CanvasWidget = {
     id: string;
     canvas_id: string;
     group_id?: string;
-    widget_type: 'calendar_master' | 'smart_list' | 'matrix' | 'detail' | 'project_header' | 'archive_bin';
+    widget_type: 'calendar_master' | 'smart_list' | 'matrix' | 'detail' | 'project_header' | 'archive_bin' | 'timeline';
     geometry: {
         x: number;
         y: number;
@@ -147,6 +147,9 @@ export class DatabaseService {
                     schema: canvasWidgetsSchema,
                     migrationStrategies: {
                         1: (oldDoc) => {
+                            return oldDoc;
+                        },
+                        2: (oldDoc) => {
                             return oldDoc;
                         }
                     }

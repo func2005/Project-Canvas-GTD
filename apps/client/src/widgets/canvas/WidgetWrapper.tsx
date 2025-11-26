@@ -238,7 +238,8 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                 smart_list: { w: 300, h: 400 },
                 matrix: { w: 500, h: 500 },
                 project_header: { w: 400, h: 300 },
-                detail: { w: 400, h: 500 }
+                detail: { w: 400, h: 500 },
+                timeline: { w: 800, h: 400 }
             };
 
 
@@ -502,7 +503,17 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                                                         }}
                                                         className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 transition-colors"
                                                     >
-                                                        Project
+                                                        Project Header
+                                                    </button>
+                                                    <button
+                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                        onClick={(e) => {
+                                                            handleAddWidget(e, 'timeline');
+                                                            setShowAddMenu(false);
+                                                        }}
+                                                        className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 transition-colors"
+                                                    >
+                                                        Timeline
                                                     </button>
                                                 </>
                                             )}
@@ -541,34 +552,36 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                             >
                                 <X size={14} />
                             </button>
-                            <button
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={async (e) => {
-                                    e.stopPropagation();
-                                    await widget.patch({
-                                        view_state: {
-                                            ...viewState,
-                                            // @ts-ignore
-                                            is_flipped: !(viewState as any).is_flipped
-                                        }
-                                    });
-                                }}
-                                className={clsx(
-                                    "p-1 rounded hover:bg-gray-200 transition-colors",
-                                    (viewState as any).is_flipped ? "text-blue-600" : "text-gray-400 hover:text-blue-600"
-                                )}
-                                title={
-                                    ['detail', 'project_detail', 'project_header', 'smart_list'].includes(widget.widget_type)
-                                        ? ((viewState as any).is_flipped ? "View Mode" : "Edit Mode")
-                                        : "Switch View"
-                                }
-                            >
-                                {['detail', 'project_detail', 'project_header', 'smart_list'].includes(widget.widget_type) ? (
-                                    (viewState as any).is_flipped ? <Eye size={14} /> : <Pencil size={14} />
-                                ) : (
-                                    <LayoutTemplate size={14} />
-                                )}
-                            </button>
+                            {widget.widget_type !== 'smart_list' && widget.widget_type !== 'calendar_master' && (
+                                <button
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={async (e) => {
+                                        e.stopPropagation();
+                                        await widget.patch({
+                                            view_state: {
+                                                ...viewState,
+                                                // @ts-ignore
+                                                is_flipped: !(viewState as any).is_flipped
+                                            }
+                                        });
+                                    }}
+                                    className={clsx(
+                                        "p-1 rounded hover:bg-gray-200 transition-colors",
+                                        (viewState as any).is_flipped ? "text-blue-600" : "text-gray-400 hover:text-blue-600"
+                                    )}
+                                    title={
+                                        ['detail', 'project_detail', 'project_header', 'smart_list'].includes(widget.widget_type)
+                                            ? ((viewState as any).is_flipped ? "View Mode" : "Edit Mode")
+                                            : "Switch View"
+                                    }
+                                >
+                                    {['detail', 'project_detail', 'project_header', 'smart_list'].includes(widget.widget_type) ? (
+                                        (viewState as any).is_flipped ? <Eye size={14} /> : <Pencil size={14} />
+                                    ) : (
+                                        <LayoutTemplate size={14} />
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
 

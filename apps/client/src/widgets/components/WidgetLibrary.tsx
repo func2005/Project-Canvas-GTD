@@ -42,6 +42,8 @@ export const WidgetLibrary = () => {
                 console.error('Failed to calculate widget position', e);
             }
 
+            const userId = db.name.replace('project_canvas_gtd_', '');
+
             if (type === 'project_hub') {
                 // Create Project Item
                 const projectId = uuidv4();
@@ -53,7 +55,7 @@ export const WidgetLibrary = () => {
                     created_at: Date.now(),
                     updated_at: new Date().toISOString(),
                     is_deleted: false,
-                    user_id: 'user_1',
+                    user_id: userId,
                     properties: { content: 'Project description goes here.' }
                 });
 
@@ -65,7 +67,8 @@ export const WidgetLibrary = () => {
                     geometry: { x, y, w: 600, h: 150, z: 100 },
                     data_source_config: { project_id: projectId, title: 'Project Header' },
                     updated_at: new Date().toISOString(),
-                    is_deleted: false
+                    is_deleted: false,
+                    user_id: userId
                 });
 
                 // 2. Calendar
@@ -76,7 +79,8 @@ export const WidgetLibrary = () => {
                     geometry: { x, y: y + 160, w: 600, h: 400, z: 100 },
                     data_source_config: { project_id: projectId, title: 'Project Calendar' },
                     updated_at: new Date().toISOString(),
-                    is_deleted: false
+                    is_deleted: false,
+                    user_id: userId
                 });
 
                 // 3. List
@@ -90,7 +94,8 @@ export const WidgetLibrary = () => {
                         title: 'Project Actions'
                     },
                     updated_at: new Date().toISOString(),
-                    is_deleted: false
+                    is_deleted: false,
+                    user_id: userId
                 });
 
             } else {
@@ -102,7 +107,8 @@ export const WidgetLibrary = () => {
                     geometry: { x, y, w, h, z: 100 },
                     data_source_config: extraConfig,
                     updated_at: new Date().toISOString(),
-                    is_deleted: false
+                    is_deleted: false,
+                    user_id: userId
                 });
             }
 

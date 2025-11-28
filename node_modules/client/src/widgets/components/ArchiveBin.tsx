@@ -23,7 +23,7 @@ export const ArchiveBin: React.FC<ArchiveBinProps> = ({ widget }) => {
     // Lazy load: Only query when expanded
     const items = useRxQuery<DataItem>('items', {
         selector: {
-            system_status: 'completed',
+            system_status: 'archived',
             is_deleted: false
         },
         sort: [{ completed_at: 'desc' }],

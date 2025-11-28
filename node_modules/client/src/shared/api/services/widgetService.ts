@@ -31,6 +31,7 @@ export class WidgetService {
             },
             updated_at: new Date().toISOString(),
             is_deleted: false,
+            user_id: db.name.replace('project_canvas_gtd_', '')
         };
 
         const insertedDoc = await db.widgets.insert(newWidget);

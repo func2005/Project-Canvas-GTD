@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/features/auth/AuthContext';
 import { debounce } from 'lodash';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { DndContext, useSensor, useSensors, MouseSensor, TouchSensor, DragEndEvent, DragOverlay } from '@dnd-kit/core';
@@ -6,6 +7,7 @@ import { handleGlobalDragEnd } from '@/shared/api/services/DragLogic';
 import { LinkLayer } from './LinkLayer';
 import { dbService } from '@/shared/api/db';
 import { WidgetWrapper } from './WidgetWrapper';
+import { ProjectHeader } from '@/widgets/components/ProjectHeader';
 import type { RxDocument } from 'rxdb';
 import type { CanvasWidget } from '@/shared/api/db';
 
@@ -13,7 +15,7 @@ interface CanvasBoardProps {
     canvasId?: string;
 }
 
-const CANVAS_SIZE = 5000;
+const CANVAS_SIZE = 50000;
 
 const WidgetsLayer = ({
     widgets,
@@ -50,28 +52,37 @@ const WidgetsLayer = ({
                     scale={scale}
                 />
             ))}
-            <div className="absolute bottom-10 right-10 bg-black/75 text-white px-3 py-1 rounded font-mono text-sm pointer-events-none z-50">
-                Scale: {scale.toFixed(3)}
-            </div>
+
         </div>
     );
 };
 
 export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_canvas' }) => {
-    const [isDbReady, setIsDbReady] = useState(false);
+    const { isDbReady, isAuthenticated } = useAuth();
     const [widgets, setWidgets] = useState<RxDocument<CanvasWidget>[]>([]);
     const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null);
 
     const [initialState] = useState(() => {
         try {
-            const saved = localStorage.getItem('canvas_transform_state');
+            const saved = localStorage.getItem('canvas_transform_state_v2');
             if (saved) {
                 return JSON.parse(saved);
             }
         } catch (e) {
             console.error('Failed to load canvas state', e);
         }
-        return { scale: 1, positionX: 0, positionY: 0 };
+
+        const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1920;
+        const viewportH = typeof window !== 'undefined' ? window.innerHeight : 1080;
+
+        const centerX = CANVAS_SIZE / 2;
+        const centerY = CANVAS_SIZE / 2;
+
+        return {
+            scale: 1,
+            positionX: (viewportW / 2) - centerX,
+            positionY: (viewportH / 2) - centerY
+        };
     });
 
     const [scale, setScale] = useState(initialState.scale);
@@ -80,7 +91,7 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
         if (!ref.state) return;
         const { scale, positionX, positionY } = ref.state;
         setScale(scale);
-        localStorage.setItem('canvas_transform_state', JSON.stringify({ scale, positionX, positionY }));
+        localStorage.setItem('canvas_transform_state_v2', JSON.stringify({ scale, positionX, positionY }));
     }, 500);
 
     const handleInit = (ref: any) => {
@@ -88,15 +99,6 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
             setScale(ref.state.scale);
         }
     };
-
-    useEffect(() => {
-        dbService.initialize()
-            .then(() => {
-                console.log('Database initialized successfully');
-                setIsDbReady(true);
-            })
-            .catch(err => console.error('Failed to initialize database:', err));
-    }, []);
 
     useEffect(() => {
         if (!isDbReady) return;
@@ -127,7 +129,6 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
         const currentZ = widget.geometry?.z || 0;
         const max = Math.max(...widgets.map(w => w.geometry?.z || 0));
 
-        // Check if already at top and unique
         const isAtTop = currentZ === max;
         const isUniqueTop = widgets.filter(w => (w.geometry?.z || 0) === max).length === 1;
 
@@ -169,62 +170,76 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
         await handleGlobalDragEnd(event, db);
     };
 
-    if (!isDbReady) {
-        return (
-            <div className="w-screen h-screen flex items-center justify-center bg-gray-50">
-                <div className="text-gray-600 text-lg">Initializing database...</div>
-            </div>
-        );
-    }
-
     return (
-        <div className="w-screen h-screen overflow-hidden bg-gray-50">
-            <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-                <TransformWrapper
-                    initialScale={initialState.scale}
-                    initialPositionX={initialState.positionX}
-                    initialPositionY={initialState.positionY}
-                    minScale={0.1}
-                    maxScale={4}
-                    limitToBounds={false}
-                    centerOnInit={false}
-                    wheel={{ step: 0.1 }}
-                    panning={{
-                        velocityDisabled: true,
-                        excluded: ['react-draggable', 'widget-header', 'dnd-draggable']
-                    }}
-                    onTransformed={handleTransform}
-                    onInit={handleInit}
-                >
-                    <TransformComponent
-                        wrapperClass="w-full h-full"
-                        contentClass=""
-                        contentStyle={{ width: CANVAS_SIZE, height: CANVAS_SIZE }}
-                    >
-                        <WidgetsLayer
-                            widgets={widgets}
-                            activeWidgetId={activeWidgetId}
-                            setActiveWidgetId={setActiveWidgetId}
-                            onBringToFront={handleBringToFront}
-                            scale={scale}
-                        />
-                    </TransformComponent>
-                </TransformWrapper>
-                <DragOverlay>
-                    {activeDragItem ? (
-                        <div
-                            className="bg-white p-2 rounded shadow-lg border border-blue-200 w-48 opacity-90 cursor-grabbing origin-top-left"
-                            style={{
-                                transform: `scale(${scale})`
-                            }}
-                        >
-                            <div className="text-sm font-medium text-gray-700 truncate">
-                                {activeDragItem.title || 'Task'}
-                            </div>
+        <div className="w-screen h-screen overflow-hidden bg-gray-50 flex flex-col">
+            <ProjectHeader title="Project Canvas GTD" onTitleChange={() => { }} />
+
+            <div className="flex-1 relative overflow-hidden">
+                {!isAuthenticated ? (
+                    <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center">
+                            <h2 className="text-2xl font-bold text-gray-700 mb-2">Welcome</h2>
+                            <p className="text-gray-500">Please login or register to access your canvas.</p>
                         </div>
-                    ) : null}
-                </DragOverlay>
-            </DndContext>
+                    </div>
+                ) : !isDbReady ? (
+                    <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-gray-600 text-lg">Initializing database...</div>
+                    </div>
+                ) : (
+                    <>
+                        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                            <TransformWrapper
+                                initialScale={initialState.scale}
+                                initialPositionX={initialState.positionX}
+                                initialPositionY={initialState.positionY}
+                                minScale={0.1}
+                                maxScale={4}
+                                limitToBounds={false}
+                                centerOnInit={false}
+                                wheel={{ step: 0.1 }}
+                                panning={{
+                                    velocityDisabled: true,
+                                    excluded: ['react-draggable', 'widget-header', 'dnd-draggable']
+                                }}
+                                onTransformed={handleTransform}
+                                onInit={handleInit}
+                            >
+                                <TransformComponent
+                                    wrapperClass="w-full h-full"
+                                    contentClass=""
+                                    contentStyle={{ width: CANVAS_SIZE, height: CANVAS_SIZE }}
+                                >
+                                    <WidgetsLayer
+                                        widgets={widgets}
+                                        activeWidgetId={activeWidgetId}
+                                        setActiveWidgetId={setActiveWidgetId}
+                                        onBringToFront={handleBringToFront}
+                                        scale={scale}
+                                    />
+                                </TransformComponent>
+                            </TransformWrapper>
+                            <DragOverlay>
+                                {activeDragItem ? (
+                                    <div
+                                        className="bg-white p-2 rounded shadow-lg border border-blue-200 w-48 opacity-90 cursor-grabbing origin-top-left"
+                                        style={{
+                                            transform: `scale(${scale})`
+                                        }}
+                                    >
+                                        <div className="text-sm font-medium text-gray-700 truncate">
+                                            {activeDragItem.title || 'Task'}
+                                        </div>
+                                    </div>
+                                ) : null}
+                            </DragOverlay>
+                        </DndContext>
+                        <div className="fixed bottom-4 right-4 bg-white/95 backdrop-blur-sm border-2 border-gray-300 shadow-lg px-3 py-2 rounded-lg font-mono text-xs font-bold text-gray-600 uppercase tracking-wider pointer-events-none z-50">
+                            Scale: {scale.toFixed(3)}
+                        </div>
+                    </>
+                )}
+            </div>
         </div>
     );
 };

@@ -6,7 +6,7 @@ import type { RxDocument } from 'rxdb';
 import type { CanvasWidget, DataItem } from '@/shared/api/db';
 import { useRxQuery } from '@/shared/api/hooks/useRxDB';
 import { propagateSignal } from '@/shared/api/services/SignalController';
-import { useDroppable, useDndMonitor, DragOverlay } from '@dnd-kit/core';
+import { useDroppable, useDndMonitor } from '@dnd-kit/core';
 
 interface MasterCalendarProps {
     widget: RxDocument<CanvasWidget>;
@@ -40,7 +40,7 @@ const DroppableCell = ({ dateStr, isCurrentMonth, isToday, isSelected, onClick, 
 
 const DroppableTimelineDay = ({ day, startHour, totalMinutes, children, isToday, onClick }: any) => {
     const dateStr = format(day, 'yyyy-MM-dd');
-    const { isOver, setNodeRef } = useDroppable({
+    const { setNodeRef } = useDroppable({
         id: `timeline_${dateStr}`,
         data: {
             type: 'timeline_day',
@@ -77,6 +77,13 @@ export const MasterCalendar: React.FC<MasterCalendarProps> = ({ widget }) => {
     useDndMonitor({
         onDragMove(event) {
             const { active, over } = event;
+
+            // Don't show ghost view for events
+            if (active.data.current?.entity_type === 'event') {
+                setDraggedOverItem(null);
+                return;
+            }
+
             if (!over || !over.data.current || over.data.current.type !== 'timeline_day') {
                 setDraggedOverItem(null);
                 return;
@@ -319,7 +326,7 @@ export const MasterCalendar: React.FC<MasterCalendarProps> = ({ widget }) => {
                             onClick={(e: React.MouseEvent) => handleDayClick(day, e)}
                         >
                             <span className={clsx(
-                                "text-[10px] w-4 h-4 flex items-center justify-center rounded-full",
+                                "text-[10px] w-5 h-5 flex items-center justify-center rounded-full leading-none pt-[1px]",
                                 isToday ? "bg-blue-500 text-white font-bold" : "text-gray-500",
                                 isSelected && !isToday && "bg-blue-200 text-blue-800 font-bold"
                             )}>
@@ -377,15 +384,23 @@ export const MasterCalendar: React.FC<MasterCalendarProps> = ({ widget }) => {
                     </div>
                     {weekDays.map(day => {
                         const isToday = isSameDay(day, new Date());
+                        const isSelected = selectedDate && isSameDay(day, selectedDate);
+
                         return (
-                            <div key={day.toISOString()} className={clsx(
-                                "py-2 text-center border-r last:border-r-0 bg-gray-50",
-                                isToday && "bg-blue-50"
-                            )}>
+                            <div
+                                key={day.toISOString()}
+                                className={clsx(
+                                    "py-2 text-center border-r last:border-r-0 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors",
+                                    isToday && "bg-gray-100",
+                                    isSelected && !isToday && "bg-blue-50"
+                                )}
+                                onClick={(e) => handleDayClick(day, e)}
+                            >
                                 <div className="text-xs text-gray-500 uppercase">{format(day, 'EEE')}</div>
                                 <div className={clsx(
-                                    "text-sm font-bold w-6 h-6 mx-auto flex items-center justify-center rounded-full mt-1",
-                                    isToday ? "bg-blue-500 text-white" : "text-gray-700"
+                                    "text-sm font-bold w-6 h-6 mx-auto flex items-center justify-center rounded-full mt-1 leading-none pt-[1px]",
+                                    isToday ? "bg-blue-500 text-white" : "text-gray-700",
+                                    isSelected && !isToday && "bg-blue-200 text-blue-800"
                                 )}>
                                     {format(day, 'd')}
                                 </div>
@@ -575,7 +590,19 @@ export const MasterCalendar: React.FC<MasterCalendarProps> = ({ widget }) => {
                     >
                         <ChevronLeft size={16} />
                     </button>
-                    <span className="font-semibold text-gray-700 text-sm w-32 text-center">
+                    <span
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (viewMode === 'month') {
+                                handleMonthChange(currentDate);
+                            }
+                        }}
+                        className={clsx(
+                            "font-semibold text-gray-700 text-sm w-32 text-center transition-colors select-none",
+                            viewMode === 'month' && "cursor-pointer hover:text-blue-600"
+                        )}
+                        title={viewMode === 'month' ? "Click to broadcast month signal" : ""}
+                    >
                         {format(currentDate, viewMode === 'month' ? 'MMMM yyyy' : "'Week of' MMM d")}
                     </span>
                     <button

@@ -22,9 +22,14 @@ export const useQueryBuilder = (config?: IDataSourceConfig): MangoQuery => {
             if (config.criteria.status) {
                 if (Array.isArray(config.criteria.status)) {
                     selector.system_status = { $in: config.criteria.status };
+                } else if (config.criteria.status === 'all') {
+                    selector.system_status = { $ne: 'archived' };
                 } else {
                     selector.system_status = config.criteria.status;
                 }
+            } else {
+                // Default: Exclude archived
+                selector.system_status = { $ne: 'archived' };
             }
 
             // Do Date Logic

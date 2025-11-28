@@ -106,13 +106,16 @@ export const dataItemsSchema = {
 // Canvas Widgets Schema
 export const canvasWidgetsSchema = {
     title: 'canvas_widgets schema',
-    version: 2,
+    version: 3,
     primaryKey: 'id',
     type: 'object',
     properties: {
         id: {
             type: 'string',
             maxLength: 100
+        },
+        user_id: {
+            type: 'string'
         },
         canvas_id: {
             type: 'string',

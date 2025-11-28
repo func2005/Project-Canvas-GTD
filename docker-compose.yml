@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: project_canvas_db
+    environment:
+      POSTGRES_USER: canvas_user
+      POSTGRES_PASSWORD: canvas_password
+      POSTGRES_DB: project_canvas
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+volumes:
+  postgres_data:

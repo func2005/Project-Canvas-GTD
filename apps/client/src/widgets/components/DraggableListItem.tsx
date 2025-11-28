@@ -17,7 +17,7 @@ export const DraggableListItem: React.FC<DraggableListItemProps> = ({ item, widg
         id: `${widgetId}::${item.id}`,
         data: {
             id: item.id,
-            entity_type: 'task',
+            entity_type: item.entity_type,
             title: item.title, // Pass title for overlay
             start_time: item.start_time,
             end_time: item.end_time
@@ -31,8 +31,8 @@ export const DraggableListItem: React.FC<DraggableListItemProps> = ({ item, widg
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const isPastDue = item.due_date && new Date(item.due_date) < today && item.system_status === 'active';
-    const isPastDo = item.do_date && new Date(item.do_date) < today && item.system_status === 'active';
+    const isPastDue = item.entity_type === 'task' && item.due_date && new Date(item.due_date) < today && item.system_status === 'active';
+    const isPastDo = item.entity_type === 'task' && item.do_date && new Date(item.do_date) < today && item.system_status === 'active';
 
     const daysPastDue = isPastDue ? Math.floor((Date.now() - new Date(item.due_date!).getTime()) / (1000 * 60 * 60 * 24)) : 0;
     const daysPastDo = isPastDo ? Math.floor((Date.now() - new Date(item.do_date!).getTime()) / (1000 * 60 * 60 * 24)) : 0;

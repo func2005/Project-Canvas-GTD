@@ -1,0 +1,2 @@
+src/widgets/components/MasterCalendar.tsx(9,39): error TS6133: 'DragOverlay' is declared but its value is never read.
+src/widgets/components/MasterCalendar.tsx(43,13): error TS6133: 'isOver' is declared but its value is never read.

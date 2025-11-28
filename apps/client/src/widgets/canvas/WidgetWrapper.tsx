@@ -244,6 +244,7 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
 
 
             const size = sizes[widgetType] || { w: 300, h: 400 };
+            const userId = db.name.replace('project_canvas_gtd_', '');
 
             // Special handling for Project Hub
             if (widgetType === 'project_header') {
@@ -251,7 +252,7 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                 const projectId = uuidv4();
                 await db.items.insert({
                     id: projectId,
-                    user_id: 'local',
+                    user_id: userId,
                     entity_type: 'project',
                     system_status: 'active',
                     title: 'New Project',
@@ -283,7 +284,8 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                         // group_id moved to top level
                     },
                     updated_at: new Date().toISOString(),
-                    is_deleted: false
+                    is_deleted: false,
+                    user_id: userId
                 });
 
                 console.log(`Created Project Hub (${projectId}) with header in group ${currentGroupId}`);
@@ -328,7 +330,8 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                     // group_id moved to top level
                 },
                 updated_at: new Date().toISOString(),
-                is_deleted: false
+                is_deleted: false,
+                user_id: userId
             });
 
             console.log(`Created ${widgetType} in group ${currentGroupId}`);

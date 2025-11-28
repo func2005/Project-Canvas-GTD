@@ -91,7 +91,7 @@ export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvas
         else if (overData.type === 'archive_bin') {
             // Case C: Item -> Archive Bin
             await (doc as any).incrementalPatch({
-                system_status: 'completed',
+                system_status: 'archived',
                 completed_at: Date.now()
             });
         }

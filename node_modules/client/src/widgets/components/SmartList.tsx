@@ -30,14 +30,14 @@ export const SmartList: React.FC<SmartListProps> = ({ widget }) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        const aPastDue = a.due_date && new Date(a.due_date) < today && a.system_status === 'active';
-        const bPastDue = b.due_date && new Date(b.due_date) < today && b.system_status === 'active';
+        const aPastDue = a.entity_type === 'task' && a.due_date && new Date(a.due_date) < today && a.system_status === 'active';
+        const bPastDue = b.entity_type === 'task' && b.due_date && new Date(b.due_date) < today && b.system_status === 'active';
 
         if (aPastDue && !bPastDue) return -1;
         if (!aPastDue && bPastDue) return 1;
 
-        const aPastDo = a.do_date && new Date(a.do_date) < today && a.system_status === 'active';
-        const bPastDo = b.do_date && new Date(b.do_date) < today && b.system_status === 'active';
+        const aPastDo = a.entity_type === 'task' && a.do_date && new Date(a.do_date) < today && a.system_status === 'active';
+        const bPastDo = b.entity_type === 'task' && b.do_date && new Date(b.do_date) < today && b.system_status === 'active';
 
         if (aPastDo && !bPastDo) return -1;
         if (!aPastDo && bPastDo) return 1;
@@ -57,6 +57,8 @@ export const SmartList: React.FC<SmartListProps> = ({ widget }) => {
         e.preventDefault();
         if (!newItemTitle.trim()) return;
 
+        console.log('[SmartList] Attempting to add item:', newItemTitle);
+
         try {
             const db = dbService.getDatabase();
 
@@ -65,7 +67,7 @@ export const SmartList: React.FC<SmartListProps> = ({ widget }) => {
             const criteria = config?.criteria || {};
             const criteriaDate = criteria.do_date;
 
-            console.log('Adding item with criteria:', criteria);
+            console.log('[SmartList] Criteria:', criteria);
 
             if (criteriaDate === 'today') {
                 doDate = format(new Date(), 'yyyy-MM-dd');
@@ -83,7 +85,7 @@ export const SmartList: React.FC<SmartListProps> = ({ widget }) => {
                 }
             }
 
-            console.log('Calculated do_date:', doDate);
+            console.log('[SmartList] Calculated do_date:', doDate);
 
             // Apply other properties from criteria (e.g. project_id)
             const properties: any = {};
@@ -101,22 +103,24 @@ export const SmartList: React.FC<SmartListProps> = ({ widget }) => {
                 entityType = filterType as any;
             }
 
-            await db.items.insert({
+            const newItem = {
                 id: uuidv4(),
                 title: newItemTitle,
                 entity_type: entityType,
-                system_status: 'active',
+                system_status: 'active' as const,
                 created_at: Date.now(),
                 updated_at: new Date().toISOString(),
                 is_deleted: false,
-                user_id: 'user_1', // Placeholder
+                user_id: db.name.replace('project_canvas_gtd_', ''), // Extract user ID from DB name as fallback
                 do_date: doDate,
                 properties: properties
-            });
+            };
+
+            await db.items.insert(newItem);
 
             setNewItemTitle('');
         } catch (error) {
-            console.error('Failed to add item:', error);
+            console.error('[SmartList] Failed to add item:', error);
         }
     };
 
@@ -213,8 +217,10 @@ export const SmartList: React.FC<SmartListProps> = ({ widget }) => {
                             className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:border-blue-500 outline-none bg-white"
                         >
                             <option value="active">Active Only</option>
+                            <option value="active">Active Only</option>
                             <option value="completed">Completed Only</option>
-                            <option value="all">All Statuses</option>
+                            <option value="archived">Archived Only</option>
+                            <option value="all">All Statuses (Non-Archived)</option>
                         </select>
                     </div>
 

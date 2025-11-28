@@ -8,15 +8,32 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
+const typeorm_1 = require("@nestjs/typeorm");
+const schedule_1 = require("@nestjs/schedule");
 const business_core_module_1 = require("./modules/business-core/business-core.module");
-const canvas_engine_module_1 = require("./modules/canvas-engine/canvas-engine.module");
+const auth_module_1 = require("./modules/auth/auth.module");
+const app_controller_1 = require("./app.controller");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
-        imports: [business_core_module_1.BusinessCoreModule, canvas_engine_module_1.CanvasEngineModule],
-        controllers: [],
+        imports: [
+            schedule_1.ScheduleModule.forRoot(),
+            typeorm_1.TypeOrmModule.forRoot({
+                type: 'postgres',
+                host: 'localhost',
+                port: 5432,
+                username: 'postgres',
+                password: 'heshuhan123',
+                database: 'project_canvas_gtd',
+                autoLoadEntities: true,
+                synchronize: true,
+            }),
+            business_core_module_1.BusinessCoreModule,
+            auth_module_1.AuthModule,
+        ],
+        controllers: [app_controller_1.AppController],
         providers: [],
     })
 ], AppModule);

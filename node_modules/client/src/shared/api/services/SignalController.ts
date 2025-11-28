@@ -46,17 +46,24 @@ export const propagateSignal = async (sourceId: string, payload: SignalPayload) 
             if (payload.type === 'date' && widget.widget_type === 'smart_list') {
                 // Create new criteria with date, explicitly removing project_id
                 const { 'properties.project_id': _, ...restCriteria } = newConfig.criteria || {};
-                newConfig.criteria = {
-                    ...restCriteria,
-                    do_date: payload.val,
-                    entity_type: 'task' // Ensure entity type is task
-                };
-
-                // Update title based on granularity
+                // Update criteria and title based on granularity
                 if (payload.granularity === 'month') {
-                    const date = new Date(payload.val + '-01');
-                    newConfig.title = date.toLocaleString('default', { month: 'long' });
+                    // For month view, we need YYYY-MM format for the query builder
+                    const date = new Date(payload.val);
+                    const monthStr = payload.val.substring(0, 7); // "YYYY-MM"
+
+                    newConfig.criteria = {
+                        ...restCriteria,
+                        do_date: monthStr,
+                        entity_type: restCriteria.entity_type || 'task'
+                    };
+                    newConfig.title = date.toLocaleString('default', { month: 'long', year: 'numeric' });
                 } else {
+                    newConfig.criteria = {
+                        ...restCriteria,
+                        do_date: payload.val,
+                        entity_type: restCriteria.entity_type || 'task'
+                    };
                     const date = new Date(payload.val);
                     newConfig.title = date.toLocaleString('default', { month: 'long', day: 'numeric' });
                 }

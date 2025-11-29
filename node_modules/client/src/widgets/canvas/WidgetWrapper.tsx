@@ -488,16 +488,7 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                                                     >
                                                         Smart List
                                                     </button>
-                                                    <button
-                                                        onMouseDown={(e) => e.stopPropagation()}
-                                                        onClick={(e) => {
-                                                            handleAddWidget(e, 'matrix');
-                                                            setShowAddMenu(false);
-                                                        }}
-                                                        className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 transition-colors"
-                                                    >
-                                                        Matrix
-                                                    </button>
+
                                                     <button
                                                         onMouseDown={(e) => e.stopPropagation()}
                                                         onClick={(e) => {

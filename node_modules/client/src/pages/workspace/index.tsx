@@ -1,5 +1,5 @@
 import { CanvasBoard } from '@/widgets/canvas/CanvasBoard';
-import { WidgetLibrary } from '@/widgets/components/WidgetLibrary';
+
 
 export const WorkspacePage = () => {
     return (
@@ -8,7 +8,7 @@ export const WorkspacePage = () => {
             <CanvasBoard />
 
             {/* Widget Library */}
-            <WidgetLibrary />
+
         </div>
     );
 };

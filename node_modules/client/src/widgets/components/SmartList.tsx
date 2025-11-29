@@ -25,7 +25,7 @@ export const SmartList: React.FC<SmartListProps> = ({ widget }) => {
     const query = useQueryBuilder(config as any);
     const rawItems = useRxQuery<DataItem>('items', query);
 
-    // Sort items: Ghost Tasks (Overdue) first
+    // Sort items: Ghost Tasks (Overdue) first, then by sort_order, then by other criteria
     const items = [...rawItems].sort((a, b) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -41,6 +41,13 @@ export const SmartList: React.FC<SmartListProps> = ({ widget }) => {
 
         if (aPastDo && !bPastDo) return -1;
         if (!aPastDo && bPastDo) return 1;
+
+        // Sort by sort_order (ascending)
+        const orderA = a.sort_order ?? 0;
+        const orderB = b.sort_order ?? 0;
+        if (orderA !== orderB) {
+            return orderA - orderB;
+        }
 
         return 0;
     });

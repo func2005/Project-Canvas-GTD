@@ -1,0 +1,8 @@
+{
+  "sql": "SELECT \"entity\".\"id\" AS \"entity_id\", \"entity\".\"user_id\" AS \"entity_user_id\", \"entity\".\"entity_type\" AS \"entity_entity_type\", \"entity\".\"title\" AS \"entity_title\", \"entity\".\"system_status\" AS \"entity_system_status\", \"entity\".\"do_date\" AS \"entity_do_date\", \"entity\".\"due_date\" AS \"entity_due_date\", \"entity\".\"start_time\" AS \"entity_start_time\", \"entity\".\"end_time\" AS \"entity_end_time\", \"entity\".\"parent_id\" AS \"entity_parent_id\", \"entity\".\"properties\" AS \"entity_properties\", \"entity\".\"sort_order\" AS \"entity_sort_order\", \"entity\".\"updated_at\" AS \"entity_updated_at\", \"entity\".\"deleted\" AS \"entity_deleted\" FROM \"data_items\" \"entity\" WHERE \"entity\".\"user_id\" = $1 AND (\"entity\".\"updated_at\" > $2 OR (\"entity\".\"updated_at\" = $2 AND \"entity\".\"id\" > $3)) ORDER BY \"entity\".\"updated_at\" ASC, \"entity\".\"id\" ASC LIMIT 2",
+  "params": {
+    "userId": "68416bce-8930-4cb6-a0cc-62c5f35804fc",
+    "time": "2025-11-29T09:14:43.588Z",
+    "lastId": "913358f7-bc41-41e3-9248-c398ec2bb2db"
+  }
+}

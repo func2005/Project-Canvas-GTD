@@ -25,9 +25,14 @@ __decorate([
 ], CanvasWidget.prototype, "canvas_id", void 0);
 __decorate([
     (0, typeorm_1.Index)(),
-    (0, typeorm_1.Column)({ nullable: true }),
+    (0, typeorm_1.Column)({ type: 'bigint', nullable: true }),
     __metadata("design:type", String)
 ], CanvasWidget.prototype, "user_id", void 0);
+__decorate([
+    (0, typeorm_1.Index)(),
+    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    __metadata("design:type", String)
+], CanvasWidget.prototype, "group_id", void 0);
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)

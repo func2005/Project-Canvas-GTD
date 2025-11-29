@@ -1,0 +1,12 @@
+{
+  "success": false,
+  "dbState": {
+    "maxId": "1000000006",
+    "sequenceValue": "1000000000"
+  },
+  "message": "重复键违反唯一约束\"PK_a3ffb1c0c8416b9fc6f907b7433\"",
+  "code": "23505",
+  "detail": "键值\"(id)=(1000000000)\" 已经存在",
+  "constraint": "PK_a3ffb1c0c8416b9fc6f907b7433",
+  "stack": "QueryFailedError: 重复键违反唯一约束\"PK_a3ffb1c0c8416b9fc6f907b7433\"\n    at PostgresQueryRunner.query (E:\\ToDoList\\MyCalendar\\Project Canvas GTD\\node_modules\\typeorm\\src\\driver\\postgres\\PostgresQueryRunner.ts:325:19)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async InsertQueryBuilder.execute (E:\\ToDoList\\MyCalendar\\Project Canvas GTD\\node_modules\\src\\query-builder\\InsertQueryBuilder.ts:164:33)\n    at async SubjectExecutor.executeInsertOperations (E:\\ToDoList\\MyCalendar\\Project Canvas GTD\\node_modules\\src\\persistence\\SubjectExecutor.ts:435:42)\n    at async SubjectExecutor.execute (E:\\ToDoList\\MyCalendar\\Project Canvas GTD\\node_modules\\src\\persistence\\SubjectExecutor.ts:137:9)\n    at async EntityPersistExecutor.execute (E:\\ToDoList\\MyCalendar\\Project Canvas GTD\\node_modules\\src\\persistence\\EntityPersistExecutor.ts:182:21)\n    at async debugRegister (E:\\ToDoList\\MyCalendar\\Project Canvas GTD\\apps\\server\\debug_register_v2.ts:48:9)"
+}

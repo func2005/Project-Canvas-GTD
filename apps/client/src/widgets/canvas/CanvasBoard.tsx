@@ -7,7 +7,7 @@ import { handleGlobalDragEnd } from '@/shared/api/services/DragLogic';
 import { LinkLayer } from './LinkLayer';
 import { dbService } from '@/shared/api/db';
 import { WidgetWrapper } from './WidgetWrapper';
-import { ProjectHeader } from '@/widgets/components/ProjectHeader';
+import { AppHeader } from '@/widgets/components/AppHeader';
 import type { RxDocument } from 'rxdb';
 import type { CanvasWidget } from '@/shared/api/db';
 
@@ -61,6 +61,7 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
     const { isDbReady, isAuthenticated } = useAuth();
     const [widgets, setWidgets] = useState<RxDocument<CanvasWidget>[]>([]);
     const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null);
+    const [currentCanvasId, setCurrentCanvasId] = useState<string | null>(canvasId === 'default_canvas' ? null : canvasId);
 
     const [initialState] = useState(() => {
         try {
@@ -100,14 +101,44 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
         }
     };
 
+    // Effect to resolve default canvas ID
     useEffect(() => {
         if (!isDbReady) return;
+
+        if (canvasId !== 'default_canvas') {
+            setCurrentCanvasId(canvasId);
+            return;
+        }
+
+        const fetchDefaultPage = async () => {
+            try {
+                const db = dbService.getDatabase();
+                const page = await db.pages.findOne({
+                    selector: { is_default: true }
+                }).exec();
+
+                if (page) {
+                    console.log('CanvasBoard: Using default page', page.id);
+                    setCurrentCanvasId(page.id);
+                } else {
+                    console.warn('CanvasBoard: No default page found yet');
+                }
+            } catch (err) {
+                console.error('CanvasBoard: Failed to fetch default page', err);
+            }
+        };
+
+        fetchDefaultPage();
+    }, [isDbReady, canvasId]);
+
+    useEffect(() => {
+        if (!isDbReady || !currentCanvasId) return;
 
         try {
             const db = dbService.getDatabase();
             const query = db.widgets.find({
                 selector: {
-                    canvas_id: canvasId,
+                    canvas_id: currentCanvasId,
                     is_deleted: false
                 }
             });
@@ -120,7 +151,7 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
         } catch (error) {
             console.error('Failed to subscribe to widgets:', error);
         }
-    }, [isDbReady, canvasId]);
+    }, [isDbReady, currentCanvasId]);
 
     const handleBringToFront = (widgetId: string) => {
         const widget = widgets.find(w => w.id === widgetId);
@@ -172,7 +203,11 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
 
     return (
         <div className="w-screen h-screen overflow-hidden bg-gray-50 flex flex-col">
-            <ProjectHeader title="Project Canvas GTD" onTitleChange={() => { }} />
+            <AppHeader
+                title="Project Canvas GTD"
+
+                canvasId={currentCanvasId || undefined}
+            />
 
             <div className="flex-1 relative overflow-hidden">
                 {!isAuthenticated ? (
@@ -239,7 +274,7 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
                         </div>
                     </>
                 )}
-            </div>
-        </div>
+            </div >
+        </div >
     );
 };

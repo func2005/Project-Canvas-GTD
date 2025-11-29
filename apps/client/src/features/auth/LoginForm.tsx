@@ -8,7 +8,7 @@ interface LoginFormProps {
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
     const { login } = useAuth();
-    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isRegistering, setIsRegistering] = useState(false);
     const [error, setError] = useState('');
@@ -18,13 +18,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
         setError('');
 
         const endpoint = isRegistering ? '/auth/register' : '/auth/login';
-        const url = `http://localhost:3002${endpoint}`;
+        const url = `http://localhost:3000${endpoint}`;
 
         try {
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password }),
+                body: JSON.stringify({ email, password }),
             });
 
             if (!response.ok) {
@@ -33,7 +33,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
             }
 
             const data = await response.json();
-            await login(data.user.username, data.access_token, data.user.id);
+            await login(data.user.email, data.access_token, data.user.id, data.user);
 
             // Only seed default data for new registrations
             if (isRegistering) {
@@ -77,11 +77,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-sm text-gray-400 mb-1">Username</label>
+                        <label className="block text-sm text-gray-400 mb-1">Email</label>
                         <input
-                            type="text"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
                             className="w-full bg-[#252525] border border-[#333] rounded p-2 text-white focus:border-blue-500 outline-none transition-colors"
                             required
                         />

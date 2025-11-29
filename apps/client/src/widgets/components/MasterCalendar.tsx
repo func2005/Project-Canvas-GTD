@@ -350,6 +350,9 @@ export const MasterCalendar: React.FC<MasterCalendarProps> = ({ widget }) => {
                                         {item.do_date && item.due_date && item.do_date > item.due_date && (
                                             <span className="ml-1 text-red-500 font-bold" title="Do Date > Due Date">⚠️</span>
                                         )}
+                                        {item.recurrence_rule && (
+                                            <span className="ml-1 text-gray-500" title="Recurring">↻</span>
+                                        )}
                                     </div>
                                 ))}
                                 {dayItems.length > 3 && (
@@ -498,7 +501,10 @@ export const MasterCalendar: React.FC<MasterCalendarProps> = ({ widget }) => {
                                                             onMouseDown={(e) => handleResizeStart(item, 'top', e)}
                                                         />
 
-                                                        <div className="truncate leading-tight font-medium">{item.title}</div>
+                                                        <div className="truncate leading-tight font-medium">
+                                                            {item.title}
+                                                            {item.recurrence_rule && <span className="ml-1 text-[8px]" title="Recurring">↻</span>}
+                                                        </div>
                                                         <div className="text-[9px] leading-tight opacity-75">
                                                             {format(start, 'HH:mm')} - {format(end, 'HH:mm')}
                                                         </div>

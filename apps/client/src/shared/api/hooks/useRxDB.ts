@@ -96,3 +96,21 @@ export function useRxQuery<T>(collectionName: 'items' | 'widgets' | 'links', que
 
     return data;
 }
+
+/**
+ * Get the database instance
+ */
+export function useRxDB() {
+    const [db, setDb] = useState<any>(null);
+
+    useEffect(() => {
+        try {
+            const database = dbService.getDatabase();
+            setDb(database);
+        } catch (error) {
+            // Database might not be ready yet
+        }
+    }, []);
+
+    return db;
+}

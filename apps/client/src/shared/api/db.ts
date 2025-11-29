@@ -5,9 +5,13 @@ import { RxDBUpdatePlugin } from 'rxdb/plugins/update';
 import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 import { replicateRxCollection } from 'rxdb/plugins/replication';
-import { dataItemsSchema, canvasWidgetsSchema } from './schema';
-import { canvasLinksSchema, CanvasLink } from './schemas/canvasLinks';
-import { v4 as uuidv4 } from 'uuid';
+import { itemSchema } from './schemas/item.schema';
+import { widgetSchema } from './schemas/widget.schema';
+import { linkSchema } from './schemas/link.schema';
+import { pageSchema } from './schemas/page.schema';
+
+const API_URL = 'http://localhost:3000';
+
 
 // Enable dev-mode for better error messages (only in development)
 if (process.env.NODE_ENV !== 'production') {
@@ -70,16 +74,35 @@ export type CanvasWidget = {
     is_deleted: boolean;
 };
 
-export type { CanvasLink };
+export type CanvasLink = {
+    id: string;
+    source_widget_id: string;
+    target_widget_id: string;
+    link_type: string;
+    updated_at: string;
+    is_deleted: boolean;
+    created_at: number;
+};
+
+export type CanvasPage = {
+    id: string;
+    user_id: string;
+    is_default: boolean;
+    viewport_config: Record<string, any>;
+    updated_at: string;
+    is_deleted: boolean;
+};
 
 export type DataItemCollection = RxCollection<DataItem>;
 export type CanvasWidgetCollection = RxCollection<CanvasWidget>;
 export type CanvasLinkCollection = RxCollection<CanvasLink>;
+export type CanvasPageCollection = RxCollection<CanvasPage>;
 
 export type DatabaseCollections = {
     items: DataItemCollection;
     widgets: CanvasWidgetCollection;
     links: CanvasLinkCollection;
+    pages: CanvasPageCollection;
 };
 
 export type ProjectCanvasDatabase = RxDatabase<DatabaseCollections>;
@@ -154,10 +177,10 @@ export class DatabaseService {
 
             await db.addCollections({
                 items: {
-                    schema: dataItemsSchema,
+                    schema: itemSchema,
                 },
                 widgets: {
-                    schema: canvasWidgetsSchema,
+                    schema: widgetSchema,
                     migrationStrategies: {
                         1: (oldDoc) => {
                             return oldDoc;
@@ -166,22 +189,38 @@ export class DatabaseService {
                             return oldDoc;
                         },
                         3: (oldDoc) => {
-                            // Migration to add user_id
-                            // Since we don't know the user_id here easily without context, 
-                            // and this is client-side where DB is per-user (db name has user_id),
-                            // we can try to infer or leave it empty/default.
-                            // However, for strict schema, it might need a value.
-                            // But since the DB is partitioned by user, we can assume the current user owns it.
-                            // For now, let's just return oldDoc and let the application handle missing fields if possible,
-                            // or set a placeholder.
                             return { ...oldDoc, user_id: userId };
                         }
                     }
                 },
                 links: {
-                    schema: canvasLinksSchema,
+                    schema: linkSchema,
+                },
+                pages: {
+                    schema: pageSchema,
                 }
             });
+
+            // Add Middleware: Auto-update updated_at
+            db.collections.items.preSave((plainData: any) => {
+                plainData.updated_at = new Date().toISOString();
+                return plainData;
+            }, false);
+
+            db.collections.widgets.preSave((data: any) => {
+                data.updated_at = new Date().toISOString();
+                return data;
+            }, false);
+
+            db.collections.links.preSave((data: any) => {
+                data.updated_at = new Date().toISOString();
+                return data;
+            }, false);
+
+            db.collections.pages.preSave((data: any) => {
+                data.updated_at = new Date().toISOString();
+                return data;
+            }, false);
 
             // Add hook for project auto-completion and auto-active
             db.items.postSave(async (doc, _oldDoc) => {
@@ -228,71 +267,129 @@ export class DatabaseService {
             }, false);
 
             // Get token for sync
+            // Get token for sync
             const token = localStorage.getItem('auth_token');
             console.log('[RxDB] Retrieved token from localStorage:', token ? token.substring(0, 20) + '...' : 'null');
             const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
             console.log('[RxDB] Sync headers:', headers);
+            // 4. Configure Replication for Pages
+            console.log('Starting replication...');
 
-            // 4. Configure Replication for Items
-            const syncStateItems = await replicateRxCollection({
-                collection: db.items,
-                replicationIdentifier: 'items-sync',
-                push: {
-                    handler: async (changeRows) => {
-                        const logMsg = `[RxDB] Pushing items: ${changeRows.length} rows`;
-                        console.log(logMsg);
-                        (window as any).logs = (window as any).logs || [];
-                        (window as any).logs.push(logMsg);
-
+            // 1. Sync Pages FIRST to ensure FK constraints
+            const syncStatePages = await replicateRxCollection({
+                collection: db.pages,
+                replicationIdentifier: 'sync-pages-v1',
+                pull: {
+                    handler: async (checkpoint: any, batchSize: number) => {
+                        const url = new URL(`${API_URL}/sync/canvas_pages/pull`);
+                        url.searchParams.set('limit', batchSize.toString());
+                        if (checkpoint && checkpoint.updated_at) {
+                            url.searchParams.set('checkpoint_time', checkpoint.updated_at);
+                            url.searchParams.set('checkpoint_id', checkpoint.id);
+                        } else {
+                            url.searchParams.set('checkpoint_time', new Date(0).toISOString());
+                            url.searchParams.set('checkpoint_id', '00000000-0000-0000-0000-000000000000');
+                        }
                         try {
-                            const rawResponse = await fetch('http://localhost:3002/sync/items/push', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    ...headers
-                                } as any,
-                                body: JSON.stringify({ changeRows })
+                            const response = await fetch(url.toString(), { headers: headers as any });
+                            if (!response.ok) throw new Error(`Page Pull failed: ${response.status}`);
+                            const data = await response.json();
+
+                            const documents = data.documents.map((doc: any) => {
+                                const { deleted, ...rest } = doc;
+                                return { ...rest, is_deleted: deleted };
                             });
-                            if (!rawResponse.ok) {
-                                console.error('[RxDB] Item Push failed:', rawResponse.status, rawResponse.statusText);
-                                if (rawResponse.status === 401) {
-                                    window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-                                }
-                                throw new Error(`Push failed: ${rawResponse.status} ${rawResponse.statusText}`);
-                            }
-                            const response = await rawResponse.json();
-                            console.log('[RxDB] Item Push success:', response);
-                            return response.conflicts || [];
+
+                            return { documents, checkpoint: data.checkpoint };
                         } catch (err) {
-                            console.error('[RxDB] Item Push error:', err);
+                            console.error('[RxDB] Page Pull error:', err);
                             throw err;
                         }
                     }
                 },
-                pull: {
-                    handler: async (checkpoint, limit) => {
-                        const url = new URL('http://localhost:3002/sync/items/pull');
-                        url.searchParams.set('checkpoint', checkpoint ? checkpoint.toString() : '0');
-                        url.searchParams.set('limit', limit.toString());
-                        console.log('[RxDB] Pulling items:', url.toString());
+                push: {
+                    handler: async (rows: any[]) => {
+                        const url = `${API_URL}/sync/canvas_pages/push`;
+                        const payload = rows.map(row => {
+                            const doc = row.newDocumentState;
+                            const { is_deleted, ...rest } = doc;
+                            return { ...rest, deleted: is_deleted };
+                        });
+                        try {
+                            const response = await fetch(url, {
+                                method: 'POST',
+                                headers: { ...headers, 'Content-Type': 'application/json' } as any,
+                                body: JSON.stringify(payload)
+                            });
+                            if (!response.ok) throw new Error(`Page Push failed: ${response.status}`);
+                            return []; // Success
+                        } catch (err) {
+                            console.error('[RxDB] Page Push error:', err);
+                            throw err;
+                        }
+                    }
+                },
+                live: true,
+                autoStart: true,
+                retryTime: 5000,
+                waitForLeadership: false, // Start immediately
+            });
 
+            // Wait for initial page sync to complete (at least one pull)
+            await syncStatePages.awaitInitialReplication();
+            console.log('Initial page sync completed');
+
+            // 2. Sync Items
+            const syncStateItems = await replicateRxCollection({
+                collection: db.items,
+                replicationIdentifier: 'sync-items-v1',
+                pull: {
+                    handler: async (checkpoint: any, batchSize: number) => {
+                        const url = new URL(`${API_URL}/sync/data_items/pull`);
+                        url.searchParams.set('limit', batchSize.toString());
+                        if (checkpoint && checkpoint.updated_at) {
+                            url.searchParams.set('checkpoint_time', checkpoint.updated_at);
+                            url.searchParams.set('checkpoint_id', checkpoint.id);
+                        } else {
+                            url.searchParams.set('checkpoint_time', new Date(0).toISOString());
+                            url.searchParams.set('checkpoint_id', '00000000-0000-0000-0000-000000000000');
+                        }
                         try {
                             const response = await fetch(url.toString(), { headers: headers as any });
                             if (!response.ok) {
-                                console.error('[RxDB] Item Pull failed:', response.status, response.statusText);
-                                if (response.status === 401) {
-                                    window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-                                }
-                                throw new Error(`Pull failed: ${response.status} ${response.statusText}`);
+                                if (response.status === 401) window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+                                throw new Error(`Item Pull failed: ${response.status}`);
                             }
                             const data = await response.json();
-                            console.log('[RxDB] Item Pull success:', data.documents.length, 'docs');
-                            return {
-                                documents: data.documents,
-                                checkpoint: data.checkpoint
-                            };
+                            const documents = data.documents.map((doc: any) => {
+                                const { deleted, ...rest } = doc;
+                                return { ...rest, is_deleted: deleted };
+                            });
+                            return { documents, checkpoint: data.checkpoint };
                         } catch (err) {
                             console.error('[RxDB] Item Pull error:', err);
+                            throw err;
+                        }
+                    }
+                },
+                push: {
+                    handler: async (rows: any[]) => {
+                        const url = `${API_URL}/sync/data_items/push`;
+                        const payload = rows.map(row => {
+                            const doc = row.newDocumentState;
+                            const { is_deleted, ...rest } = doc;
+                            return { ...rest, deleted: is_deleted };
+                        });
+                        try {
+                            const response = await fetch(url, {
+                                method: 'POST',
+                                headers: { ...headers, 'Content-Type': 'application/json' } as any,
+                                body: JSON.stringify(payload)
+                            });
+                            if (!response.ok) throw new Error(`Item Push failed: ${response.status}`);
+                            return [];
+                        } catch (err) {
+                            console.error('[RxDB] Item Push error:', err);
                             throw err;
                         }
                     }
@@ -302,77 +399,58 @@ export class DatabaseService {
                 retryTime: 5000,
             });
 
-            // 5. Configure Replication for Widgets
+            // 3. Sync Widgets (After Pages)
             const syncStateWidgets = await replicateRxCollection({
                 collection: db.widgets,
-                replicationIdentifier: 'widgets-sync',
-                push: {
-                    handler: async (changeRows) => {
-                        const logMsg = `[RxDB] Pushing widgets: ${changeRows.length} rows`;
-                        console.log(logMsg);
-                        (window as any).logs = (window as any).logs || [];
-                        (window as any).logs.push(logMsg);
-
+                replicationIdentifier: 'sync-widgets-v1',
+                pull: {
+                    handler: async (checkpoint: any, batchSize: number) => {
+                        const url = new URL(`${API_URL}/sync/canvas_widgets/pull`);
+                        url.searchParams.set('limit', batchSize.toString());
+                        if (checkpoint && checkpoint.updated_at) {
+                            url.searchParams.set('checkpoint_time', checkpoint.updated_at);
+                            url.searchParams.set('checkpoint_id', checkpoint.id);
+                        } else {
+                            url.searchParams.set('checkpoint_time', new Date(0).toISOString());
+                            url.searchParams.set('checkpoint_id', '00000000-0000-0000-0000-000000000000');
+                        }
                         try {
-                            const rawResponse = await fetch('http://localhost:3002/sync/widgets/push', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    ...headers
-                                } as any,
-                                body: JSON.stringify({ changeRows })
-                            });
-                            if (!rawResponse.ok) {
-                                const errorMsg = `[RxDB] Widget Push failed: ${rawResponse.status} ${rawResponse.statusText}`;
-                                console.error(errorMsg);
-                                (window as any).logs = (window as any).logs || [];
-                                (window as any).logs.push(errorMsg);
-
-                                if (rawResponse.status === 401) {
-                                    window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-                                }
-                                throw new Error(errorMsg);
+                            const response = await fetch(url.toString(), { headers: headers as any });
+                            if (!response.ok) {
+                                if (response.status === 401) window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+                                throw new Error(`Widget Pull failed: ${response.status}`);
                             }
-                            const response = await rawResponse.json();
-                            const successMsg = `[RxDB] Widget Push success: ${JSON.stringify(response)}`;
-                            console.log(successMsg);
-                            (window as any).logs = (window as any).logs || [];
-                            (window as any).logs.push(successMsg);
-
-                            return response.conflicts || [];
+                            const data = await response.json();
+                            console.log('[RxDB] Widget Pull success:', data.documents.length, 'docs');
+                            const documents = data.documents.map((doc: any) => {
+                                const { deleted, ...rest } = doc;
+                                return { ...rest, is_deleted: deleted };
+                            });
+                            return { documents, checkpoint: data.checkpoint };
                         } catch (err) {
-                            const errorMsg = `[RxDB] Widget Push error: ${err}`;
-                            console.error(errorMsg);
-                            (window as any).logs = (window as any).logs || [];
-                            (window as any).logs.push(errorMsg);
+                            console.error('[RxDB] Widget Pull error:', err);
                             throw err;
                         }
                     }
                 },
-                pull: {
-                    handler: async (checkpoint, limit) => {
-                        const url = new URL('http://localhost:3002/sync/widgets/pull');
-                        url.searchParams.set('checkpoint', checkpoint ? checkpoint.toString() : '0');
-                        url.searchParams.set('limit', limit.toString());
-                        console.log('[RxDB] Pulling widgets:', url.toString());
-
+                push: {
+                    handler: async (rows: any[]) => {
+                        const url = `${API_URL}/sync/canvas_widgets/push`;
+                        const payload = rows.map(row => {
+                            const doc = row.newDocumentState;
+                            const { is_deleted, ...rest } = doc;
+                            return { ...rest, deleted: is_deleted };
+                        });
                         try {
-                            const response = await fetch(url.toString(), { headers: headers as any });
-                            if (!response.ok) {
-                                console.error('[RxDB] Widget Pull failed:', response.status, response.statusText);
-                                if (response.status === 401) {
-                                    window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-                                }
-                                throw new Error(`Widget Pull failed: ${response.status} ${response.statusText}`);
-                            }
-                            const data = await response.json();
-                            console.log('[RxDB] Widget Pull success:', data.documents.length, 'docs');
-                            return {
-                                documents: data.documents,
-                                checkpoint: data.checkpoint
-                            };
+                            const response = await fetch(url, {
+                                method: 'POST',
+                                headers: { ...headers, 'Content-Type': 'application/json' } as any,
+                                body: JSON.stringify(payload)
+                            });
+                            if (!response.ok) throw new Error(`Widget Push failed: ${response.status}`);
+                            return [];
                         } catch (err) {
-                            console.error('[RxDB] Widget Pull error:', err);
+                            console.error('[RxDB] Widget Push error:', err);
                             throw err;
                         }
                     }
@@ -385,6 +463,7 @@ export class DatabaseService {
             // Expose sync state for debugging
             (window as any).syncStateItems = syncStateItems;
             (window as any).syncStateWidgets = syncStateWidgets;
+            (window as any).syncStatePages = syncStatePages;
 
             console.log('Database initialized successfully');
 
@@ -397,16 +476,40 @@ export class DatabaseService {
 
     public async seedDefaultData(db: ProjectCanvasDatabase): Promise<void> {
         try {
-            const widgetCount = await db.widgets.count().exec();
+            console.log('Checking default data...');
+            const now = new Date().toISOString();
+            const userId = db.name.replace('project_canvas_gtd_', '');
 
+            // 1. Get or Create Default Page
+            let canvasId: string;
+            const existingPage = await db.pages.findOne({
+                selector: { is_default: true }
+            }).exec();
+
+            if (existingPage) {
+                canvasId = existingPage.id;
+                console.log('Found existing default page:', canvasId);
+            } else {
+                canvasId = self.crypto.randomUUID();
+                console.log('Creating new default page:', canvasId);
+                await db.pages.insert({
+                    id: canvasId,
+                    user_id: userId,
+                    is_default: true,
+                    viewport_config: {},
+                    updated_at: now,
+                    is_deleted: false
+                });
+            }
+
+            const widgetCount = await db.widgets.count().exec();
             if (widgetCount > 0) {
+                console.log('Widgets already exist, skipping widget seeding.');
                 return;
             }
 
             console.log('Seeding default widgets...');
-            const now = new Date().toISOString();
-            const canvasId = 'default_canvas'; // Match CanvasBoard default
-            const defaultGroupId = 'group_default_main'; // Deterministic group ID
+            const defaultGroupId = self.crypto.randomUUID(); // Deterministic group ID
 
             // Center calculation for 50000x50000 canvas
             // Total width: 800 (Calendar) + 20 (Gap) + 350 (Sidebar) = 1170
@@ -416,12 +519,11 @@ export class DatabaseService {
 
             const startX = 24415;
             const startY = 24700;
-            const userId = db.name.replace('project_canvas_gtd_', '');
 
             await db.widgets.bulkInsert([
                 // 1. Master Calendar
                 {
-                    id: 'widget_default_calendar',
+                    id: self.crypto.randomUUID(),
                     canvas_id: canvasId,
                     group_id: defaultGroupId,
                     widget_type: 'calendar_master',
@@ -433,7 +535,7 @@ export class DatabaseService {
                 },
                 // 2. Inbox (Smart List)
                 {
-                    id: 'widget_default_inbox',
+                    id: self.crypto.randomUUID(),
                     canvas_id: canvasId,
                     // group_id: defaultGroupId, // Inbox should be independent
                     widget_type: 'smart_list',
@@ -451,7 +553,7 @@ export class DatabaseService {
                 },
                 // 3. Archive Bin (The Shredder)
                 {
-                    id: 'widget_default_archive',
+                    id: self.crypto.randomUUID(),
                     canvas_id: canvasId,
                     group_id: defaultGroupId,
                     widget_type: 'archive_bin',
@@ -486,7 +588,19 @@ export class DatabaseService {
      */
     public async destroy(): Promise<void> {
         if (this.db) {
-            await this.db.remove();
+            try {
+                // Try destroy (standard RxDB close)
+                if (typeof (this.db as any).destroy === 'function') {
+                    await (this.db as any).destroy();
+                } else if (typeof (this.db as any).close === 'function') {
+                    // Fallback to close if destroy is missing
+                    await (this.db as any).close();
+                } else {
+                    console.warn('Database instance does not have destroy or close method');
+                }
+            } catch (e) {
+                console.error('Error closing database:', e);
+            }
             this.db = null;
             this.initializationPromise = null;
         }

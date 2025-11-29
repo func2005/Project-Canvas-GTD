@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Calendar, List, FileText, Trash2, Grid, Type, Clock } from 'lucide-react';
+import { Plus, Calendar, List, FileText, Trash2, Type, Clock } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { dbService } from '@/shared/api/db';
 
@@ -10,14 +10,19 @@ const WIDGET_TYPES = [
     { type: 'smart_list', label: 'Smart List', icon: List, w: 300, h: 400 },
     { type: 'detail', label: 'Detail Inspector', icon: FileText, w: 300, h: 400 },
     { type: 'archive_bin', label: 'Archive Bin', icon: Trash2, w: 200, h: 200 },
-    { type: 'matrix', label: 'Eisenhower Matrix', icon: Grid, w: 500, h: 500 },
+
     { type: 'timeline', label: 'Timeline', icon: Clock, w: 800, h: 400 },
 ];
 
-export const WidgetLibrary = () => {
+export const WidgetLibrary = ({ canvasId }: { canvasId?: string }) => {
     const [isOpen, setIsOpen] = useState(false);
 
     const handleAddWidget = async (type: string, w: number, h: number, extraConfig: any = {}) => {
+        if (!canvasId) {
+            console.warn('Cannot add widget: No canvas ID provided');
+            return;
+        }
+
         try {
             const db = dbService.getDatabase();
 
@@ -26,17 +31,17 @@ export const WidgetLibrary = () => {
             let y = 100;
 
             try {
-                const savedState = localStorage.getItem('canvas_transform_state');
+                const savedState = localStorage.getItem('canvas_transform_state_v2');
                 if (savedState) {
                     const { scale, positionX, positionY } = JSON.parse(savedState);
 
-                    // Target: Center horizontally, Top 20% vertically
+                    // Target: Center of the viewport
                     const viewportCenterX = window.innerWidth / 2;
-                    const viewportTopY = window.innerHeight * 0.2;
+                    const viewportCenterY = window.innerHeight / 2;
 
                     // Convert to canvas coordinates: (screen - pan) / scale
                     x = (viewportCenterX - positionX) / scale - (w / 2);
-                    y = (viewportTopY - positionY) / scale;
+                    y = (viewportCenterY - positionY) / scale - (h / 2);
                 }
             } catch (e) {
                 console.error('Failed to calculate widget position', e);
@@ -62,7 +67,7 @@ export const WidgetLibrary = () => {
                 // 1. Header
                 await db.widgets.insert({
                     id: uuidv4(),
-                    canvas_id: 'default_canvas',
+                    canvas_id: canvasId,
                     widget_type: 'project_header',
                     geometry: { x, y, w: 600, h: 150, z: 100 },
                     data_source_config: { project_id: projectId, title: 'Project Header' },
@@ -74,7 +79,7 @@ export const WidgetLibrary = () => {
                 // 2. Calendar
                 await db.widgets.insert({
                     id: uuidv4(),
-                    canvas_id: 'default_canvas',
+                    canvas_id: canvasId,
                     widget_type: 'calendar_master',
                     geometry: { x, y: y + 160, w: 600, h: 400, z: 100 },
                     data_source_config: { project_id: projectId, title: 'Project Calendar' },
@@ -86,7 +91,7 @@ export const WidgetLibrary = () => {
                 // 3. List
                 await db.widgets.insert({
                     id: uuidv4(),
-                    canvas_id: 'default_canvas',
+                    canvas_id: canvasId,
                     widget_type: 'smart_list',
                     geometry: { x: x + 610, y: y + 160, w: 300, h: 400, z: 100 },
                     data_source_config: {
@@ -102,7 +107,7 @@ export const WidgetLibrary = () => {
                 // Standard Widget
                 await db.widgets.insert({
                     id: uuidv4(),
-                    canvas_id: 'default_canvas',
+                    canvas_id: canvasId,
                     widget_type: type as any,
                     geometry: { x, y, w, h, z: 100 },
                     data_source_config: extraConfig,
@@ -120,12 +125,12 @@ export const WidgetLibrary = () => {
     };
 
     return (
-        <div className="absolute top-4 left-4 z-50 font-sans">
+        <div className="relative font-sans z-50">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg shadow-lg hover:bg-gray-50 border border-gray-200 font-medium transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 bg-[#333] hover:bg-[#444] text-white rounded-md border border-[#444] transition-colors text-sm"
             >
-                <Plus size={18} />
+                <Plus size={16} />
                 <span>Add Widget</span>
             </button>
 

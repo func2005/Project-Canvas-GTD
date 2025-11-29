@@ -3,13 +3,16 @@ import { dbService } from '../../shared/api/db';
 
 interface User {
     id: string;
-    username: string;
+    email: string;
+    nickname?: string;
+    avatar_url?: string;
+    settings?: Record<string, any>;
 }
 
 interface AuthContextType {
     user: User | null;
     token: string | null;
-    login: (username: string, token: string, userId: string) => Promise<void>;
+    login: (email: string, token: string, userId: string, userData?: Partial<User>) => Promise<void>;
     logout: () => Promise<void>;
     isAuthenticated: boolean;
     isDbReady: boolean;
@@ -33,7 +36,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUser(parsedUser);
             // Initialize DB with user ID
             dbService.initialize(parsedUser.id)
-                .then(() => setIsDbReady(true))
+                .then(async (db) => {
+                    await dbService.seedDefaultData(db);
+                    setIsDbReady(true);
+                })
                 .catch(console.error);
         }
 
@@ -50,15 +56,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, []);
 
-    const login = async (username: string, newToken: string, userId: string) => {
-        const newUser = { id: userId, username };
+    const login = async (email: string, newToken: string, userId: string, userData?: Partial<User>) => {
+        const newUser = { id: userId, email, ...userData };
         setToken(newToken);
         setUser(newUser);
         localStorage.setItem('auth_token', newToken);
         localStorage.setItem('auth_user', JSON.stringify(newUser));
 
         // Re-initialize DB for this user
-        await dbService.initialize(userId);
+        const db = await dbService.initialize(userId);
+        await dbService.seedDefaultData(db);
         setIsDbReady(true);
     };
 

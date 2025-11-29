@@ -155,8 +155,63 @@ export const DetailInspector: React.FC<DetailInspectorProps> = ({ widget }) => {
                                 />
                             </div>
                         </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Start Time</label>
+                                <input
+                                    type="datetime-local"
+                                    defaultValue={item.start_time ? new Date(item.start_time).toISOString().slice(0, 16) : ''}
+                                    onChange={(e) => saveChanges(item, { start_time: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                                    className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">End Time</label>
+                                <input
+                                    type="datetime-local"
+                                    defaultValue={item.end_time ? new Date(item.end_time).toISOString().slice(0, 16) : ''}
+                                    onChange={(e) => saveChanges(item, { end_time: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                                    className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"
+                                />
+                            </div>
+                        </div>
                     </>
                 )}
+
+                {/* Common Fields for All Types */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Sort Order</label>
+                        <input
+                            type="number"
+                            defaultValue={item.sort_order || 0}
+                            onChange={(e) => saveChanges(item, { sort_order: parseFloat(e.target.value) })}
+                            className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Recurrence</label>
+                        <input
+                            type="text"
+                            defaultValue={item.recurrence_rule || ''}
+                            onChange={(e) => saveChanges(item, { recurrence_rule: e.target.value || null })}
+                            placeholder="e.g. DAILY"
+                            className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"
+                        />
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Parent ID</label>
+                    <input
+                        type="text"
+                        defaultValue={item.parent_id || ''}
+                        onChange={(e) => saveChanges(item, { parent_id: e.target.value || null })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500 font-mono text-xs"
+                        placeholder="UUID"
+                    />
+                </div>
 
                 {/* Content */}
                 <div className="flex-1 flex flex-col min-h-[100px]">

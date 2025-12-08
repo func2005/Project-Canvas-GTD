@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param, UseGuards, Req, Request } from '@nestjs/common';
 import { SyncService } from './sync.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { SyncCheckpoint } from '../../common/interfaces/sync-checkpoint.interface';
@@ -21,6 +21,11 @@ export class SyncController {
             lastId: checkpointId
         };
         return this.syncService.pullChanges(req.user.id, collection, checkpoint, limit || 100);
+    }
+
+    @Post('batch/push')
+    async pushBatch(@Request() req, @Body() body: any) {
+        return this.syncService.pushBatchChanges(req.user.id, body);
     }
 
     @Post(':collection/push')

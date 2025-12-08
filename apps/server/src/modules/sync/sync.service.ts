@@ -60,6 +60,55 @@ export class SyncService {
 
     async pushChanges(userId: string, collection: string, changes: any[]) {
         const repo = this.getRepo(collection);
+        return this.processChanges(repo, changes, userId);
+    }
+
+    async pushBatchChanges(userId: string, batchDto: any) {
+        const queryRunner = this.dataSource.createQueryRunner();
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
+        try {
+            const results = { pages: [], widgets: [], links: [], items: [] };
+
+            // 1. Core Logic: Force Order (Parent -> Child -> Leaf)
+
+            // Step A: Pages (Root)
+            if (batchDto.pages?.length) {
+                const repo = queryRunner.manager.getRepository(CanvasPage);
+                results.pages = await this.processChanges(repo, batchDto.pages, userId);
+            }
+
+            // Step B: Widgets (Depend on Pages)
+            if (batchDto.widgets?.length) {
+                const repo = queryRunner.manager.getRepository(CanvasWidget);
+                results.widgets = await this.processChanges(repo, batchDto.widgets, userId);
+            }
+
+            // Step C: Links & Items (Leafs)
+            if (batchDto.links?.length) {
+                const repo = queryRunner.manager.getRepository(CanvasLink);
+                results.links = await this.processChanges(repo, batchDto.links, userId);
+            }
+            if (batchDto.items?.length) {
+                const repo = queryRunner.manager.getRepository(DataItem);
+                results.items = await this.processChanges(repo, batchDto.items, userId);
+            }
+
+            // Commit transaction
+            await queryRunner.commitTransaction();
+            return results;
+
+        } catch (err) {
+            console.error('Batch Sync Failed, Rolling Back:', err);
+            await queryRunner.rollbackTransaction();
+            throw err;
+        } finally {
+            await queryRunner.release();
+        }
+    }
+
+    private async processChanges(repo: Repository<any>, changes: any[], userId: string) {
         const conflicts = [];
         const written = [];
 

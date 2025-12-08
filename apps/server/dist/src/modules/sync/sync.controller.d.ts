@@ -8,5 +8,11 @@ export declare class SyncController {
         checkpoint: SyncCheckpoint;
         hasMore: boolean;
     }>;
+    pushBatch(req: any, body: any): Promise<{
+        pages: any[];
+        widgets: any[];
+        links: any[];
+        items: any[];
+    }>;
     push(req: any, collection: string, changes: any[]): Promise<any[]>;
 }

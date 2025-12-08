@@ -63,6 +63,43 @@ let SyncService = class SyncService {
     }
     async pushChanges(userId, collection, changes) {
         const repo = this.getRepo(collection);
+        return this.processChanges(repo, changes, userId);
+    }
+    async pushBatchChanges(userId, batchDto) {
+        const queryRunner = this.dataSource.createQueryRunner();
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+        try {
+            const results = { pages: [], widgets: [], links: [], items: [] };
+            if (batchDto.pages?.length) {
+                const repo = queryRunner.manager.getRepository(canvas_page_entity_1.CanvasPage);
+                results.pages = await this.processChanges(repo, batchDto.pages, userId);
+            }
+            if (batchDto.widgets?.length) {
+                const repo = queryRunner.manager.getRepository(canvas_widget_entity_1.CanvasWidget);
+                results.widgets = await this.processChanges(repo, batchDto.widgets, userId);
+            }
+            if (batchDto.links?.length) {
+                const repo = queryRunner.manager.getRepository(canvas_link_entity_1.CanvasLink);
+                results.links = await this.processChanges(repo, batchDto.links, userId);
+            }
+            if (batchDto.items?.length) {
+                const repo = queryRunner.manager.getRepository(data_item_entity_1.DataItem);
+                results.items = await this.processChanges(repo, batchDto.items, userId);
+            }
+            await queryRunner.commitTransaction();
+            return results;
+        }
+        catch (err) {
+            console.error('Batch Sync Failed, Rolling Back:', err);
+            await queryRunner.rollbackTransaction();
+            throw err;
+        }
+        finally {
+            await queryRunner.release();
+        }
+    }
+    async processChanges(repo, changes, userId) {
         const conflicts = [];
         const written = [];
         for (const change of changes) {

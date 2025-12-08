@@ -27,6 +27,9 @@ let SyncController = class SyncController {
         };
         return this.syncService.pullChanges(req.user.id, collection, checkpoint, limit || 100);
     }
+    async pushBatch(req, body) {
+        return this.syncService.pushBatchChanges(req.user.id, body);
+    }
     async push(req, collection, changes) {
         return this.syncService.pushChanges(req.user.id, collection, changes);
     }
@@ -43,6 +46,14 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, String, String, Number]),
     __metadata("design:returntype", Promise)
 ], SyncController.prototype, "pull", null);
+__decorate([
+    (0, common_1.Post)('batch/push'),
+    __param(0, (0, common_1.Request)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], SyncController.prototype, "pushBatch", null);
 __decorate([
     (0, common_1.Post)(':collection/push'),
     __param(0, (0, common_1.Req)()),

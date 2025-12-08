@@ -1,17 +1,18 @@
-import { createRxDatabase, RxDatabase, RxCollection, addRxPlugin } from 'rxdb';
+import { createRxDatabase, RxDatabase, RxCollection, addRxPlugin, removeRxDatabase } from 'rxdb';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
 import { RxDBUpdatePlugin } from 'rxdb/plugins/update';
 import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 import { replicateRxCollection } from 'rxdb/plugins/replication';
+import { BatchSyncManager } from './BatchSyncManager';
 import { itemSchema } from './schemas/item.schema';
 import { widgetSchema } from './schemas/widget.schema';
 import { linkSchema } from './schemas/link.schema';
 import { pageSchema } from './schemas/page.schema';
 
 const API_URL = 'http://localhost:3000';
-
+const DB_NAME_PREFIX = 'project_canvas_gtd_';
 
 // Enable dev-mode for better error messages (only in development)
 if (process.env.NODE_ENV !== 'production') {
@@ -108,14 +109,30 @@ export type DatabaseCollections = {
 export type ProjectCanvasDatabase = RxDatabase<DatabaseCollections>;
 
 /**
+ * Destroy database for user (Cleanup)
+ */
+export async function destroyDatabaseForUser(userId: string) {
+    const dbName = `${DB_NAME_PREFIX}${userId}`;
+    try {
+        await removeRxDatabase(dbName, getRxStorageDexie());
+        console.log(`Database ${dbName} deleted.`);
+    } catch (err) {
+        console.error('Failed to remove database:', err);
+    }
+}
+
+/**
  * Singleton DatabaseService for managing RxDB instance
  */
 export class DatabaseService {
     private static instance: DatabaseService;
     private db: ProjectCanvasDatabase | null = null;
     private initializationPromise: Promise<ProjectCanvasDatabase> | null = null;
+    private batchManager: BatchSyncManager;
 
-    private constructor() { }
+    private constructor() {
+        this.batchManager = new BatchSyncManager(() => localStorage.getItem('auth_token'));
+    }
 
     public static getInstance(): DatabaseService {
         if (!DatabaseService.instance) {
@@ -129,7 +146,7 @@ export class DatabaseService {
      */
     public async initialize(userId: string): Promise<ProjectCanvasDatabase> {
         // If already initialized with same user, return existing database
-        if (this.db && this.db.name === `project_canvas_gtd_${userId}`) {
+        if (this.db && this.db.name === `${DB_NAME_PREFIX}${userId}`) {
             return this.db;
         }
 
@@ -141,7 +158,7 @@ export class DatabaseService {
         // If initialization is in progress, wait for it
         if (this.initializationPromise) {
             await this.initializationPromise;
-            if (this.db && this.db.name === `project_canvas_gtd_${userId}`) {
+            if (this.db && this.db.name === `${DB_NAME_PREFIX}${userId}`) {
                 return this.db;
             }
         }
@@ -166,7 +183,7 @@ export class DatabaseService {
                 ? wrappedValidateAjvStorage({ storage: getRxStorageDexie() })
                 : getRxStorageDexie();
 
-            const dbName = `project_canvas_gtd_${userId}`;
+            const dbName = `${DB_NAME_PREFIX}${userId}`;
             console.log(`Initializing database: ${dbName}`);
 
             const db = await createRxDatabase<DatabaseCollections>({
@@ -267,11 +284,9 @@ export class DatabaseService {
             }, false);
 
             // Get token for sync
-            // Get token for sync
             const token = localStorage.getItem('auth_token');
-            console.log('[RxDB] Retrieved token from localStorage:', token ? token.substring(0, 20) + '...' : 'null');
             const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
-            console.log('[RxDB] Sync headers:', headers);
+
             // 4. Configure Replication for Pages
             console.log('Starting replication...');
 
@@ -292,7 +307,10 @@ export class DatabaseService {
                         }
                         try {
                             const response = await fetch(url.toString(), { headers: headers as any });
-                            if (!response.ok) throw new Error(`Page Pull failed: ${response.status}`);
+                            if (!response.ok) {
+                                if (response.status === 401) window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+                                throw new Error(`Page Pull failed: ${response.status}`);
+                            }
                             const data = await response.json();
 
                             const documents = data.documents.map((doc: any) => {
@@ -309,24 +327,12 @@ export class DatabaseService {
                 },
                 push: {
                     handler: async (rows: any[]) => {
-                        const url = `${API_URL}/sync/canvas_pages/push`;
                         const payload = rows.map(row => {
                             const doc = row.newDocumentState;
                             const { is_deleted, ...rest } = doc;
                             return { ...rest, deleted: is_deleted };
                         });
-                        try {
-                            const response = await fetch(url, {
-                                method: 'POST',
-                                headers: { ...headers, 'Content-Type': 'application/json' } as any,
-                                body: JSON.stringify(payload)
-                            });
-                            if (!response.ok) throw new Error(`Page Push failed: ${response.status}`);
-                            return []; // Success
-                        } catch (err) {
-                            console.error('[RxDB] Page Push error:', err);
-                            throw err;
-                        }
+                        return await this.batchManager.addToQueue('pages', payload);
                     }
                 },
                 live: true,
@@ -335,7 +341,7 @@ export class DatabaseService {
                 waitForLeadership: false, // Start immediately
             });
 
-            // Wait for initial page sync to complete (at least one pull)
+            // Wait for initial page sync to complete
             await syncStatePages.awaitInitialReplication();
             console.log('Initial page sync completed');
 
@@ -374,24 +380,12 @@ export class DatabaseService {
                 },
                 push: {
                     handler: async (rows: any[]) => {
-                        const url = `${API_URL}/sync/data_items/push`;
                         const payload = rows.map(row => {
                             const doc = row.newDocumentState;
                             const { is_deleted, ...rest } = doc;
                             return { ...rest, deleted: is_deleted };
                         });
-                        try {
-                            const response = await fetch(url, {
-                                method: 'POST',
-                                headers: { ...headers, 'Content-Type': 'application/json' } as any,
-                                body: JSON.stringify(payload)
-                            });
-                            if (!response.ok) throw new Error(`Item Push failed: ${response.status}`);
-                            return [];
-                        } catch (err) {
-                            console.error('[RxDB] Item Push error:', err);
-                            throw err;
-                        }
+                        return await this.batchManager.addToQueue('items', payload);
                     }
                 },
                 live: true,
@@ -435,24 +429,12 @@ export class DatabaseService {
                 },
                 push: {
                     handler: async (rows: any[]) => {
-                        const url = `${API_URL}/sync/canvas_widgets/push`;
                         const payload = rows.map(row => {
                             const doc = row.newDocumentState;
                             const { is_deleted, ...rest } = doc;
                             return { ...rest, deleted: is_deleted };
                         });
-                        try {
-                            const response = await fetch(url, {
-                                method: 'POST',
-                                headers: { ...headers, 'Content-Type': 'application/json' } as any,
-                                body: JSON.stringify(payload)
-                            });
-                            if (!response.ok) throw new Error(`Widget Push failed: ${response.status}`);
-                            return [];
-                        } catch (err) {
-                            console.error('[RxDB] Widget Push error:', err);
-                            throw err;
-                        }
+                        return await this.batchManager.addToQueue('widgets', payload);
                     }
                 },
                 live: true,
@@ -510,12 +492,6 @@ export class DatabaseService {
 
             console.log('Seeding default widgets...');
             const defaultGroupId = self.crypto.randomUUID(); // Deterministic group ID
-
-            // Center calculation for 50000x50000 canvas
-            // Total width: 800 (Calendar) + 20 (Gap) + 350 (Sidebar) = 1170
-            // Total height: 600 (Calendar)
-            // Center X: 25000 - 1170/2 = 24415
-            // Center Y: 25000 - 600/2 = 24700
 
             const startX = 24415;
             const startY = 24700;

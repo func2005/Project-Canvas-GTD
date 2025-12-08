@@ -10,4 +10,11 @@ export declare class SyncService {
         hasMore: boolean;
     }>;
     pushChanges(userId: string, collection: string, changes: any[]): Promise<any[]>;
+    pushBatchChanges(userId: string, batchDto: any): Promise<{
+        pages: any[];
+        widgets: any[];
+        links: any[];
+        items: any[];
+    }>;
+    private processChanges;
 }

@@ -6,11 +6,11 @@
         "build": "nest build",
         "format": "prettier --write \"src/**/*.ts\"",
         "start": "nest start",
-        "start:dev": "nest start --watch",
+        "start:dev": "node scripts/kill-port.js && nest start --watch",
         "start:debug": "nest start --debug --watch",
         "start:prod": "node dist/main",
         "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-        "dev": "nest start --watch"
+        "dev": "node scripts/kill-port.js && nest start --watch"
     },
     "dependencies": {
         "@nestjs/common": "^10.0.0",

@@ -78,7 +78,6 @@ export const DraggableListItem: React.FC<DraggableListItemProps> = ({ item, widg
 
             <div
                 className="flex-1 cursor-pointer hover:text-blue-600"
-                onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => onSelect(item.id)}
             >
                 <span

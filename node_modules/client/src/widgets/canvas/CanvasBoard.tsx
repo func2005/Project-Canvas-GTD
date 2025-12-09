@@ -15,7 +15,7 @@ interface CanvasBoardProps {
     canvasId?: string;
 }
 
-const CANVAS_SIZE = 50000;
+const CANVAS_SIZE = 5000;
 
 const WidgetsLayer = ({
     widgets,
@@ -36,6 +36,7 @@ const WidgetsLayer = ({
             style={{
                 width: CANVAS_SIZE,
                 height: CANVAS_SIZE,
+                backgroundColor: '#f8fafc', // slate-50 to ensure dots are visible
                 backgroundImage: 'radial-gradient(circle, #cbd5e1 1px, transparent 1px)',
                 backgroundSize: '20px 20px',
             }}
@@ -65,7 +66,7 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
 
     const [initialState] = useState(() => {
         try {
-            const saved = localStorage.getItem('canvas_transform_state_v2');
+            const saved = localStorage.getItem('canvas_transform_state_v3');
             if (saved) {
                 return JSON.parse(saved);
             }
@@ -92,7 +93,7 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
         if (!ref.state) return;
         const { scale, positionX, positionY } = ref.state;
         setScale(scale);
-        localStorage.setItem('canvas_transform_state_v2', JSON.stringify({ scale, positionX, positionY }));
+        localStorage.setItem('canvas_transform_state_v3', JSON.stringify({ scale, positionX, positionY }));
     }, 500);
 
     const handleInit = (ref: any) => {
@@ -144,7 +145,10 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
             });
 
             const sub = query.$.subscribe({
-                next: (docs) => setWidgets(docs)
+                next: (docs) => {
+                    console.log('CanvasBoard: Loaded widgets:', docs.length, docs.map(w => ({ id: w.id, x: w.geometry.x, y: w.geometry.y })));
+                    setWidgets(docs);
+                }
             });
 
             return () => sub.unsubscribe();
@@ -230,7 +234,7 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
                                 initialPositionY={initialState.positionY}
                                 minScale={0.1}
                                 maxScale={4}
-                                limitToBounds={false}
+                                limitToBounds={true}
                                 centerOnInit={false}
                                 wheel={{ step: 0.1 }}
                                 panning={{

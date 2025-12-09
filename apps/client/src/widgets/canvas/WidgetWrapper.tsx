@@ -110,7 +110,8 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                 ...geometry,
                 x: snappedX,
                 y: snappedY,
-            }
+            },
+            updated_at: new Date().toISOString()
         });
     }, [widget, geometry]);
 
@@ -169,7 +170,8 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
                 y: snappedY,
                 w: snappedW,
                 h: snappedH,
-            }
+            },
+            updated_at: new Date().toISOString()
         });
     }, [widget, geometry]);
 
@@ -207,7 +209,8 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
             view_state: {
                 ...viewState,
                 is_pinned: !isPinned,
-            }
+            },
+            updated_at: new Date().toISOString()
         });
     }, [widget, viewState, isPinned]);
 
@@ -346,6 +349,7 @@ export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ widget, isActive, 
 
         await widget.patch({
             is_deleted: true,
+            updated_at: new Date().toISOString()
         });
     }, [widget]);
 

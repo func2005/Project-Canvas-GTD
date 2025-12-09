@@ -13,4 +13,9 @@ export declare class DataItem {
     sort_order: number;
     updated_at: Date;
     deleted: boolean;
+    is_all_day: boolean;
+    recurrence_rule: string;
+    original_event_id: string;
+    created_at: number;
+    completed_at: number;
 }

@@ -23,7 +23,8 @@ export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvas
             // Case A: List Item -> Calendar Cell
             await (doc as any).incrementalPatch({
                 do_date: overData.date,
-                start_time: null // Reset time block
+                start_time: null, // Reset time block
+                updated_at: new Date().toISOString()
             });
         }
         else if (overData.type === 'matrix_quad') {
@@ -49,6 +50,7 @@ export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvas
             }
 
             updates.properties = newProps;
+            updates.updated_at = new Date().toISOString();
             await (doc as any).incrementalPatch(updates);
         }
         else if (overData.type === 'smart_list') {
@@ -86,13 +88,15 @@ export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvas
             }
 
             updates.properties = props;
+            updates.updated_at = new Date().toISOString();
             await (doc as any).incrementalPatch(updates);
         }
         else if (overData.type === 'archive_bin') {
             // Case C: Item -> Archive Bin
             await (doc as any).incrementalPatch({
                 system_status: 'archived',
-                completed_at: Date.now()
+                completed_at: Date.now(),
+                updated_at: new Date().toISOString()
             });
         }
         else if (overData.type === 'timeline_day') {
@@ -135,7 +139,8 @@ export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvas
                 await (doc as any).incrementalPatch({
                     do_date: format(new Date(day), 'yyyy-MM-dd'),
                     start_time: startTime.toISOString(),
-                    end_time: endTime.toISOString()
+                    end_time: endTime.toISOString(),
+                    updated_at: new Date().toISOString()
                 });
             }
         }
@@ -148,7 +153,8 @@ export const handleGlobalDragEnd = async (event: DragEndEvent, db: ProjectCanvas
                     properties: {
                         ...currentProps,
                         project_id: projectId
-                    }
+                    },
+                    updated_at: new Date().toISOString()
                 });
             }
         }

@@ -1,4 +1,5 @@
 import { createRxDatabase, RxDatabase, RxCollection, addRxPlugin, removeRxDatabase } from 'rxdb';
+import { v5 as uuidv5 } from 'uuid';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
 import { RxDBUpdatePlugin } from 'rxdb/plugins/update';
@@ -367,6 +368,7 @@ export class DatabaseService {
                                 throw new Error(`Item Pull failed: ${response.status}`);
                             }
                             const data = await response.json();
+                            console.log('[RxDB] Item Pull success:', data.documents.length, 'docs'); // DEBUG LOG
                             const documents = data.documents.map((doc: any) => {
                                 const { deleted, ...rest } = doc;
                                 return { ...rest, is_deleted: deleted };
@@ -385,6 +387,7 @@ export class DatabaseService {
                             const { is_deleted, ...rest } = doc;
                             return { ...rest, deleted: is_deleted };
                         });
+                        console.log('[RxDB] Pushing items to batch:', payload.length);
                         return await this.batchManager.addToQueue('items', payload);
                     }
                 },
@@ -434,6 +437,7 @@ export class DatabaseService {
                             const { is_deleted, ...rest } = doc;
                             return { ...rest, deleted: is_deleted };
                         });
+                        console.log('[RxDB] Pushing WIDGETS to batch:', payload.length);
                         return await this.batchManager.addToQueue('widgets', payload);
                     }
                 },
@@ -462,27 +466,94 @@ export class DatabaseService {
             const now = new Date().toISOString();
             const userId = db.name.replace('project_canvas_gtd_', '');
 
+            // Namespace for deterministic IDs (UUID v5)
+            const NAMESPACE_DEFAULT_PAGE = '1b671a64-40d5-491e-99b0-da01ff1f3341';
+
             // 1. Get or Create Default Page
-            let canvasId: string;
-            const existingPage = await db.pages.findOne({
-                selector: { is_default: true }
-            }).exec();
+            const canvasId = uuidv5(userId, NAMESPACE_DEFAULT_PAGE);
+
+            // Check if it exists by ID (Primary Key is faster/safer)
+            const existingPage = await db.pages.findOne(canvasId).exec();
 
             if (existingPage) {
-                canvasId = existingPage.id;
                 console.log('Found existing default page:', canvasId);
             } else {
-                canvasId = self.crypto.randomUUID();
-                console.log('Creating new default page:', canvasId);
-                await db.pages.insert({
-                    id: canvasId,
-                    user_id: userId,
-                    is_default: true,
-                    viewport_config: {},
-                    updated_at: now,
-                    is_deleted: false
-                });
+                console.log('Creating deterministic default page:', canvasId);
+                try {
+                    await db.pages.insert({
+                        id: canvasId,
+                        user_id: userId,
+                        is_default: true,
+                        viewport_config: {},
+                        updated_at: now,
+                        is_deleted: false
+                    });
+                } catch (err: any) {
+                    if (err?.code === 'CONFLICT' || err?.status === 409) {
+                        console.log('Default page already exists (race condition handled).');
+                    } else {
+                        throw err;
+                    }
+                }
             }
+
+            // --- RECOVERY MIGRATION ---
+            // Move any widgets that belong to this user but have a different canvas_id (orphaned from random UUIDs)
+            // to this new deterministic default page.
+            const orphanedWidgets = await db.widgets.find({
+                selector: {
+                    user_id: userId,
+                    canvas_id: { $ne: canvasId },
+                    is_deleted: false
+                }
+            }).exec();
+
+            if (orphanedWidgets.length > 0) {
+                console.log(`Migrating ${orphanedWidgets.length} orphaned widgets to deterministic page ${canvasId}...`);
+                await Promise.all(orphanedWidgets.map(w => w.patch({
+                    canvas_id: canvasId,
+                    updated_at: new Date().toISOString()
+                })));
+                console.log('Migration complete.');
+            }
+            // --------------------------
+
+            // --- CANVAS RESIZE MIGRATION ---
+            // Move widgets that are out of bounds (old 50k canvas) to new 5k canvas center
+            const outOfBoundsWidgets = await db.widgets.find({
+                selector: {
+                    user_id: userId,
+                    'geometry.x': { $gt: 5000 },
+                    is_deleted: false
+                }
+            }).exec();
+
+            if (outOfBoundsWidgets.length > 0) {
+                console.log(`Migrating ${outOfBoundsWidgets.length} out-of-bounds widgets to new center...`);
+                await Promise.all(outOfBoundsWidgets.map(w => {
+                    // Old center ~24415, New ~2100. Delta approx -22315
+                    // Or just clamp/reset to center area.
+                    // Let's bring them to 2100 + offset relative to old start
+                    const oldBaseX = 24415;
+                    const oldBaseY = 24700;
+                    const newBaseX = 2100;
+                    const newBaseY = 2200;
+
+                    const offsetX = w.geometry.x - oldBaseX;
+                    const offsetY = w.geometry.y - oldBaseY;
+
+                    return w.patch({
+                        geometry: {
+                            ...w.geometry,
+                            x: newBaseX + offsetX,
+                            y: newBaseY + offsetY
+                        },
+                        updated_at: new Date().toISOString()
+                    });
+                }));
+                console.log('Resize migration complete.');
+            }
+            // --------------------------
 
             const widgetCount = await db.widgets.count().exec();
             if (widgetCount > 0) {
@@ -490,11 +561,22 @@ export class DatabaseService {
                 return;
             }
 
-            console.log('Seeding default widgets...');
+            // Ensure only registered users trigger cold start seeding.
+            // (Assuming valid UUIDs are registered users and ignoring potential 'guest' prefixes if any exist in future)
+            if (userId && userId.startsWith('guest_')) {
+                console.log('Skipping default data seeding for guest user:', userId);
+                return;
+            }
+
+            console.log('Seeding default widgets for user:', userId);
             const defaultGroupId = self.crypto.randomUUID(); // Deterministic group ID
 
-            const startX = 24415;
-            const startY = 24700;
+            // Center of 5000x5000 is 2500, 2500.
+            // Master Calendar is 800x600.
+            // Center X = 2500 - (800/2) = 2100
+            // Center Y = 2500 - (600/2) = 2200
+            const startX = 2100;
+            const startY = 2200;
 
             await db.widgets.bulkInsert([
                 // 1. Master Calendar

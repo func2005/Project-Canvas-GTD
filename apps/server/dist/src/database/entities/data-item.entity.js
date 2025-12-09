@@ -70,6 +70,26 @@ __decorate([
     (0, typeorm_1.Column)({ default: false }),
     __metadata("design:type", Boolean)
 ], DataItem.prototype, "deleted", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: false }),
+    __metadata("design:type", Boolean)
+], DataItem.prototype, "is_all_day", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
+    __metadata("design:type", String)
+], DataItem.prototype, "recurrence_rule", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    __metadata("design:type", String)
+], DataItem.prototype, "original_event_id", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'bigint', nullable: true }),
+    __metadata("design:type", Number)
+], DataItem.prototype, "created_at", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'bigint', nullable: true }),
+    __metadata("design:type", Number)
+], DataItem.prototype, "completed_at", void 0);
 exports.DataItem = DataItem = __decorate([
     (0, typeorm_1.Entity)('data_items'),
     (0, typeorm_1.Index)('idx_data_items_sync', ['user_id', 'updated_at', 'id']),

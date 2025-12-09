@@ -46,4 +46,21 @@ export class DataItem {
 
     @Column({ default: false })
     deleted: boolean;
+
+    // --- Missing Fields Added for Client Alignment ---
+
+    @Column({ default: false })
+    is_all_day: boolean;
+
+    @Column({ type: 'text', nullable: true })
+    recurrence_rule: string;
+
+    @Column({ type: 'uuid', nullable: true })
+    original_event_id: string;
+
+    @Column({ type: 'bigint', nullable: true })
+    created_at: number;
+
+    @Column({ type: 'bigint', nullable: true })
+    completed_at: number;
 }

@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { createRxDatabase, RxDatabase, RxCollection, addRxPlugin, removeRxDatabase } from 'rxdb';
 import { v5 as uuidv5 } from 'uuid';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
@@ -12,13 +13,14 @@ import { widgetSchema } from './schemas/widget.schema';
 import { linkSchema } from './schemas/link.schema';
 import { pageSchema } from './schemas/page.schema';
 
-const API_URL = 'http://localhost:3000';
-const DB_NAME_PREFIX = 'project_canvas_gtd_';
+const API_URL = import.meta.env.VITE_API_URL || '/api'; // Use /api as default for production proxy
+const DB_NAME_PREFIX = 'projectcanvasgtd';
 
-// Enable dev-mode for better error messages (only in development)
-if (process.env.NODE_ENV !== 'production') {
-    addRxPlugin(RxDBDevModePlugin);
-}
+// FORCE Enable dev-mode for debugging
+addRxPlugin(RxDBDevModePlugin);
+// if (process.env.NODE_ENV !== 'production') {
+//    addRxPlugin(RxDBDevModePlugin);
+// }
 
 // Enable update plugin
 addRxPlugin(RxDBUpdatePlugin);
@@ -179,12 +181,12 @@ export class DatabaseService {
 
     private async initializeDatabase(userId: string): Promise<ProjectCanvasDatabase> {
         try {
-            // Wrap storage with validator for dev-mode
-            const storage = process.env.NODE_ENV !== 'production'
-                ? wrappedValidateAjvStorage({ storage: getRxStorageDexie() })
-                : getRxStorageDexie();
+            // Wrap storage with validator unconditionally for DevMode
+            const storage = wrappedValidateAjvStorage({ storage: getRxStorageDexie() });
 
-            const dbName = `${DB_NAME_PREFIX}${userId}`;
+            // Sanitize userId to remove hyphens/special chars for RxDB strict naming
+            const sanitizedUserId = userId.replace(/[^a-zA-Z0-9]/g, '');
+            const dbName = `${DB_NAME_PREFIX}${sanitizedUserId}`;
             console.log(`Initializing database: ${dbName}`);
 
             const db = await createRxDatabase<DatabaseCollections>({
@@ -342,9 +344,9 @@ export class DatabaseService {
                 waitForLeadership: false, // Start immediately
             });
 
-            // Wait for initial page sync to complete
-            await syncStatePages.awaitInitialReplication();
-            console.log('Initial page sync completed');
+            // Do not wait for initial page sync, as it might fail (e.g. 401) and block the app.
+            // await syncStatePages.awaitInitialReplication();
+            // console.log('Initial page sync completed');
 
             // 2. Sync Items
             const syncStateItems = await replicateRxCollection({

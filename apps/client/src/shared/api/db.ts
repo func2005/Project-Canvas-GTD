@@ -16,11 +16,10 @@ import { pageSchema } from './schemas/page.schema';
 const API_URL = import.meta.env.VITE_API_URL || '/api'; // Use /api as default for production proxy
 const DB_NAME_PREFIX = 'projectcanvasgtd';
 
-// FORCE Enable dev-mode for debugging
-addRxPlugin(RxDBDevModePlugin);
-// if (process.env.NODE_ENV !== 'production') {
-//    addRxPlugin(RxDBDevModePlugin);
-// }
+// Enable dev-mode for better error messages (only in development)
+if (process.env.NODE_ENV !== 'production') {
+    addRxPlugin(RxDBDevModePlugin);
+}
 
 // Enable update plugin
 addRxPlugin(RxDBUpdatePlugin);
@@ -134,7 +133,10 @@ export class DatabaseService {
     private batchManager: BatchSyncManager;
 
     private constructor() {
-        this.batchManager = new BatchSyncManager(() => localStorage.getItem('auth_token'));
+        this.batchManager = new BatchSyncManager(
+            () => localStorage.getItem('auth_token'),
+            `${API_URL}/sync/batch/push`
+        );
     }
 
     public static getInstance(): DatabaseService {
@@ -181,8 +183,10 @@ export class DatabaseService {
 
     private async initializeDatabase(userId: string): Promise<ProjectCanvasDatabase> {
         try {
-            // Wrap storage with validator unconditionally for DevMode
-            const storage = wrappedValidateAjvStorage({ storage: getRxStorageDexie() });
+            // Wrap storage with validator for dev-mode
+            const storage = process.env.NODE_ENV !== 'production'
+                ? wrappedValidateAjvStorage({ storage: getRxStorageDexie() })
+                : getRxStorageDexie();
 
             // Sanitize userId to remove hyphens/special chars for RxDB strict naming
             const sanitizedUserId = userId.replace(/[^a-zA-Z0-9]/g, '');
@@ -192,7 +196,7 @@ export class DatabaseService {
             const db = await createRxDatabase<DatabaseCollections>({
                 name: dbName,
                 storage: storage,
-                ignoreDuplicate: true, // Allow re-using existing database
+                ignoreDuplicate: process.env.NODE_ENV !== 'production', // Only allowed in dev-mode
             });
 
             await db.addCollections({

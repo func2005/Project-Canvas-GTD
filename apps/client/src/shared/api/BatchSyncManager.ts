@@ -10,9 +10,11 @@ export class BatchSyncManager {
     private queue: PendingChange[] = [];
     private debounceTimer: any = null;
     private readonly DEBOUNCE_MS = 50; // Buffer window
-    private readonly API_URL = 'http://localhost:3000/sync/batch/push';
 
-    constructor(private getToken: () => string | null) { }
+    constructor(
+        private getToken: () => string | null,
+        private apiUrl: string
+    ) { }
 
     /**
      * Called by RxDB. We return a promise that resolves when the batch is flushed.
@@ -74,7 +76,7 @@ export class BatchSyncManager {
                 items: payload.items.length
             });
 
-            const response = await fetch(this.API_URL, {
+            const response = await fetch(this.apiUrl, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(payload)

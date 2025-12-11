@@ -32,7 +32,7 @@ const WidgetsLayer = ({
 }) => {
     return (
         <div
-            className="relative"
+            className="relative shrink-0"
             style={{
                 width: CANVAS_SIZE,
                 height: CANVAS_SIZE,
@@ -66,7 +66,7 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
 
     const [initialState] = useState(() => {
         try {
-            const saved = localStorage.getItem('canvas_transform_state_v3');
+            const saved = localStorage.getItem('canvas_transform_state_v8');
             if (saved) {
                 return JSON.parse(saved);
             }
@@ -74,26 +74,23 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
             console.error('Failed to load canvas state', e);
         }
 
-        const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1920;
-        const viewportH = typeof window !== 'undefined' ? window.innerHeight : 1080;
-
-        const centerX = CANVAS_SIZE / 2;
-        const centerY = CANVAS_SIZE / 2;
-
+        // Return default values, but rely on centerOnInit for positioning if no state
         return {
             scale: 1,
-            positionX: (viewportW / 2) - centerX,
-            positionY: (viewportH / 2) - centerY
+            positionX: 0,
+            positionY: 0
         };
     });
 
+    const [hasSavedState] = useState(() => !!localStorage.getItem('canvas_transform_state_v8'));
     const [scale, setScale] = useState(initialState.scale);
 
     const handleTransform = debounce((ref: any) => {
         if (!ref.state) return;
         const { scale, positionX, positionY } = ref.state;
+        // console.log('Transform:', { scale, positionX, positionY });
         setScale(scale);
-        localStorage.setItem('canvas_transform_state_v3', JSON.stringify({ scale, positionX, positionY }));
+        localStorage.setItem('canvas_transform_state_v8', JSON.stringify({ scale, positionX, positionY }));
     }, 500);
 
     const handleInit = (ref: any) => {
@@ -101,6 +98,7 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
             setScale(ref.state.scale);
         }
     };
+
 
     // Effect to resolve default canvas ID
     useEffect(() => {
@@ -234,9 +232,11 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
                                 initialPositionY={initialState.positionY}
                                 minScale={0.1}
                                 maxScale={4}
-                                limitToBounds={true}
-                                centerOnInit={false}
-                                wheel={{ step: 0.1 }}
+                                limitToBounds={false}
+                                centerZoomedOut={false}
+                                centerOnInit={!hasSavedState}
+                                alignmentAnimation={{ sizeX: 0, sizeY: 0 }}
+                                wheel={{ step: 0.05 }}
                                 panning={{
                                     velocityDisabled: true,
                                     excluded: ['react-draggable', 'widget-header', 'dnd-draggable']
@@ -246,8 +246,8 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ canvasId = 'default_ca
                             >
                                 <TransformComponent
                                     wrapperClass="w-full h-full"
-                                    contentClass=""
-                                    contentStyle={{ width: CANVAS_SIZE, height: CANVAS_SIZE }}
+                                    contentClass="shrink-0"
+                                    contentStyle={{ width: CANVAS_SIZE, height: CANVAS_SIZE, minWidth: CANVAS_SIZE, minHeight: CANVAS_SIZE }}
                                 >
                                     <WidgetsLayer
                                         widgets={widgets}

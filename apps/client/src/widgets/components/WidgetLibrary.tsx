@@ -31,7 +31,7 @@ export const WidgetLibrary = ({ canvasId }: { canvasId?: string }) => {
             let y = 100;
 
             try {
-                const savedState = localStorage.getItem('canvas_transform_state_v2');
+                const savedState = localStorage.getItem('canvas_transform_state_v8');
                 if (savedState) {
                     const { scale, positionX, positionY } = JSON.parse(savedState);
 

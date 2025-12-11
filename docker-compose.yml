@@ -8,11 +8,53 @@ services:
       POSTGRES_USER: canvas_user
       POSTGRES_PASSWORD: canvas_password
       POSTGRES_DB: project_canvas
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: always
+    networks:
+      - app_network
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    container_name: project_canvas_server
+    ports:
+      - "3000:3000" # Optional: expose API directly if needed, otherwise only internal
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: canvas_user
+      DB_PASSWORD: canvas_password
+      DB_DATABASE: project_canvas
+      # Production should supply this via .env file
+      JWT_SECRET: ${JWT_SECRET:-please_change_this_secret_in_production}
+    depends_on:
+      - postgres
+    restart: always
+    networks:
+      - app_network
+
+  client:
+    build:
+      context: .
+      dockerfile: apps/client/Dockerfile
+      args:
+        # Client requests will go to /api/..., which Nginx proxies to server
+        VITE_API_URL: /api
+    container_name: project_canvas_client
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    restart: always
+    networks:
+      - app_network
 
 volumes:
   postgres_data:
+
+
+networks:
+  app_network:
+    driver: bridge
